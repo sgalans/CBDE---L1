@@ -1,0 +1,27 @@
+# PostgreSQL for the CBDE Lab 1.
+#
+# The pgvector/pgvector image is a stock PostgreSQL image with the pgvector
+# extension *available* but NOT enabled: the extension only exists in a database
+# after an explicit `CREATE EXTENSION vector`. P0/P1/P2 therefore run on plain
+# PostgreSQL (database `cbde`), and the optional part enables the extension in a
+# separate database (`cbde_pgvector`) so the two experiments never interfere.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cbde_postgres
+    environment:
+      POSTGRES_USER: cbde
+      POSTGRES_PASSWORD: cbde
+      POSTGRES_DB: cbde
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cbde -d cbde"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

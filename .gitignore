@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Chroma persistent store
+chroma/chroma_db/
+chroma_db/
+*.sqlite3
+
+# HuggingFace / sentence-transformers caches
+.cache/
+hf_cache/
+models/
+
+# Measurement outputs (keep the folder, ignore nothing by default:
+# results are small JSON files and ARE committed on purpose)
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Postgres docker volume (if bind-mounted locally)
+pgdata/
+
+# Notebooks
+.ipynb_checkpoints/

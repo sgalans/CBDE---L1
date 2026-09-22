@@ -1,0 +1,17 @@
+# Data & corpus
+datasets>=3.0.0
+pandas>=2.2.0
+pyarrow>=16.0.0
+numpy>=1.26.0
+
+# Embeddings
+sentence-transformers>=3.0.0
+
+# PostgreSQL (P0-P2 and G0-G2)
+psycopg2-binary>=2.9.9
+
+# Vector database (C0-C2)
+chromadb>=0.5.0
+
+# pgvector adapter (optional part)
+pgvector>=0.3.0
