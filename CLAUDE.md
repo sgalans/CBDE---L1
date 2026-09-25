@@ -34,20 +34,20 @@ De cada sèrie de temps: **mínim, màxim, mitjana i desviació estàndard**.
 | Format de dades | **Parquet** a `data/` |
 | Repo | https://github.com/sgalans/CBDE---L1 |
 
-## Nota sobre les màquines de treball
+## Màquines de treball
 
-El projecte es fa servir des de dues màquines:
+Cada membre de l'equip desenvolupa des del seu portàtil. El repo no conté cap
+entorn: a cada màquina es clona i es crea el `.venv` (vegeu README).
 
-- **PC de la universitat**: només la unitat de xarxa `F:` (`\\rdoc.fib.upc.es\dades`)
-  persisteix entre sessions, i té una quota de només ~5 GB. **No hi instal·lis
-  el `.venv`** (torch + chromadb no hi caben i els imports per SMB són lents),
-  ni hi deixis caus de HuggingFace.
-- **Portàtil personal**: és on es farà la major part del desenvolupament i on
-  s'executaran els experiments (els temps mesurats han de venir tots de la
-  mateixa màquina per ser comparables).
+- **Mesures finals**: tots els temps que surtin al document (`results/*.json`)
+  s'han d'executar al **portàtil d'en Sergi Galán**, perquè siguin comparables. Els
+  temps generats en altres màquines serveixen per provar, però no es
+  committegen.
+- **Dades**: `data/*.parquet` i `data/queries.json` estan committejats i són la
+  font única. No es regeneren amb `prepare_corpus.py --force` (el mirror de
+  HuggingFace podria canviar i sortiria un corpus diferent).
+- **Windows**: executar `.venv\Scripts\activate` per el virtual environment.
 
-Per això el repo no conté cap entorn: es clona i es fa `pip install -r
-requirements.txt` a cada màquina.
 
 ## Indicacions explícites del professor (crítiques per a la nota)
 
