@@ -1,0 +1,68 @@
+{
+  "dataset": "rojagtap/bookcorpus",
+  "seed": 42,
+  "top_k": 2,
+  "n_sentences": 10000,
+  "queries": [
+    {
+      "query_rank": 0,
+      "sentence_id": 654,
+      "chunk_id": 32,
+      "text": "jasons face grinned in a seriously weird way that screamed , weirdo !"
+    },
+    {
+      "query_rank": 1,
+      "sentence_id": 1114,
+      "chunk_id": 55,
+      "text": "it must have been some type of faery because i could see long , pointed ears sticking up from the sides of its head ."
+    },
+    {
+      "query_rank": 2,
+      "sentence_id": 2025,
+      "chunk_id": 101,
+      "text": "it involves lots of smart remarks and bad decisions involving life or death ."
+    },
+    {
+      "query_rank": 3,
+      "sentence_id": 3759,
+      "chunk_id": 187,
+      "text": "he was squinting at the thing with extreme concentration , like a successful young stock broker in an armani suit instead of a missionary in cut-off khaki shorts that really needed a haircut ."
+    },
+    {
+      "query_rank": 4,
+      "sentence_id": 4281,
+      "chunk_id": 214,
+      "text": "she took one last glance at wara but did n't seem to be concerned as she sauntered into the back room ."
+    },
+    {
+      "query_rank": 5,
+      "sentence_id": 5250,
+      "chunk_id": 262,
+      "text": "wara bit her lip , then strummed a chord ."
+    },
+    {
+      "query_rank": 6,
+      "sentence_id": 6228,
+      "chunk_id": 311,
+      "text": "for that , i offer my life now in jihad , against the injustices of the world and against the unrighteousness in my own heart ."
+    },
+    {
+      "query_rank": 7,
+      "sentence_id": 7142,
+      "chunk_id": 357,
+      "text": "trae watched in horror as the buicks dark tinted windows began to lower ."
+    },
+    {
+      "query_rank": 8,
+      "sentence_id": 8754,
+      "chunk_id": 437,
+      "text": "but three misses , we go home and im two hundred richer ."
+    },
+    {
+      "query_rank": 9,
+      "sentence_id": 9104,
+      "chunk_id": 455,
+      "text": "theyd always wear gloves , and mix it fifty parts water to one part acid ."
+    }
+  ]
+}
