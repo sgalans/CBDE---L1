@@ -202,6 +202,114 @@ Eines:
   va passar d'un 11 % (lots de 500) a un 25 % (lots de 1000) de guany; el
   text, que deia "només", es va reescriure sense prejutjar la magnitud.
 
+### C0 — Disseny i una proposta de la IA descartada
+
+- **IA:** client integrat (`PersistentClient`) amb telemetria desactivada, una
+  sola funció d'embeddings ONNX compartida i escalfada abans de cronometrar, i
+  una mesura de referència del temps d'embedding sol per saber quina part de
+  l'`add()` és càlcul de vectors.
+- **Incidència:** una prova "ràpida" va trigar més d'un minut (cada càrrega
+  recalcula 10.000 embeddings) i l'usuari la va aturar. Per reduir el temps,
+  la IA va proposar retallar el grid (treure la mida 1 o fer-la amb una
+  mostra).
+- **Correcció de l'usuari:** va preguntar si la IA seguia el `CLAUDE.md`. La
+  proposta contradeia la decisió "grid únic; cap script defineix el seu propi
+  grid", que garanteix que C0 sigui comparable amb P0. Es descarta: el grid
+  complet es manté i s'executa en segon pla. Lliçó: contrastar cada proposta
+  amb les decisions ja preses abans de presentar-la.
+
+### Revisió externa de l'esborrany de PostgreSQL
+
+- **IA externa (xat de Claude, amb l'informe):** cinc observacions.
+- **Validació (Claude Code) contra el repo:**
+  - (1) "El TODO de Chroma contradiu el CLAUDE.md": **incorrecte**, la IA
+    externa tenia una versió antiga del `CLAUDE.md` (l'opció A ja s'havia
+    substituït). Lliçó: una revisió externa només és fiable si rep el context
+    actual.
+  - (2) Justificació de la mida de lot: la dada "el CLAUDE.md diu 500" també
+    era antiga, però la crítica de fons era **correcta**: "per tenir més lots
+    per a les estadístiques" és un argument de mesura, no del sistema. Es
+    reescriu amb el comportament del sistema (corba que s'aplana).
+  - (3) Definir què és cada n i cada desviació: **correcte**, afegit a la
+    metodologia i a les llegendes.
+  - (4) Línies de codi esbiaixades (P2 inclou validacions): **correcte**. Es
+    defineix un criteri explícit (`SYSTEM_CODE`: només codi que interactua
+    amb el sistema) i es mostren les dues xifres. P2 passa de 217 a 71 línies.
+  - (5) Definir *impedance mismatch*: l'equip decideix **no** incloure-la
+    (l'enunciat no la demana).
+
+### Llegendes de taula que no arribaven al PDF
+
+- **IA externa:** va insistir dues vegades que el criteri de línies i el
+  nombre de repeticions no s'explicaven enlloc.
+- **Claude Code:** inicialment ho va considerar ja resolt, perquè les
+  llegendes eren al `.qmd` i sortien a la renderització en Markdown que havia
+  fet servir per validar. En comprovar la sortida Typst (la que genera el PDF)
+  va veure que **Quarto descartava les llegendes** (`: caption`) de les
+  taules impreses des d'una cel·la de Python.
+- **Correcció:** les llegendes es generen com a paràgraf normal numerat
+  ("**Taula N.** …") i es verifica sobre la sortida Typst.
+- **Lliçó:** validar sobre el format que es lliura (PDF), no sobre un format
+  intermedi. La crítica externa tenia raó encara que el seu diagnòstic ("no
+  s'explica") no n'identifiqués la causa.
+
+### Revisió externa del disseny de Chroma
+
+- **IA externa:** (1) una sola càrrega a la mida oficial no permet respondre
+  l'estabilitat de [CQ1] com a [PQ1]; (2) "la mètrica gairebé no afecta la
+  inserció" no tenia dades; (3) "P0 + generació de P1" és una comparació
+  aproximada (ONNX vs. PyTorch); (4) el filtre `where` té un cost no mesurat;
+  (5) `update()` sobre HNSW no és gratuït.
+- **Claude Code:** totes correctes. (2), (3) i (5) no requereixen executar
+  res: (2) i (5) surten de la càrrega oficial i de la referència d'embedding
+  ja previstes, (3) és text. Per a (1) va proposar primer una drecera (sumar
+  la càrrega del grid a l'oficial, ~2,5 min) i després la va descartar per
+  una solució més neta (3 càrregues oficials a L2, ~10 min més), avisant del
+  cost. Per a (4), una variant de referència mesurada, com el cosinus unitari
+  de P2.
+- **Decisió de l'equip:** fer (1) i (4). La frase no suportada de (2) es
+  treu fins tenir les dades.
+
+### C1/C2 i redacció de [CQ1]: errors detectats en validar
+
+- **Validació que falla amb raó:** `C1` exigia que els vectors desats fossin
+  bit a bit iguals als generats, i a la col·lecció `cosine` no ho eren
+  (≤ 1,5e-8). Abans de relaxar la comprovació, es va investigar: una primera
+  prova no va ser concloent (regenerar embeddings amb lots diferents ja dona
+  diferències de 1e-7), i es va refer comparant les dues col·leccions entre
+  elles. Conclusió: l'espai `cosine` re-normalitza els vectors. Es manté la
+  igualtat exacta a `l2` i una tolerància explícita a `cosine`.
+- **Dada invàlida detectada per la IA:** en re-executar `C1`, la comparació
+  ONNX vs. model va donar 0 perquè els vectors ja eren els nostres. Es va
+  canviar el script perquè guardi `null` en lloc d'un 0 enganyós.
+- **Error de càlcul propi:** la part d'embedding de l'`add()` sortia 32 %
+  perquè dividia totals de 3 càrregues per totals d'1; en revisar les xifres
+  abans de redactar-les es va corregir a mitjanes per lot (97 %).
+- **Hipòtesi desmentida:** la IA esperava que `update()` fos més ràpid que
+  l'`INSERT` de `P1` (Chroma rep numpy sense passar per text). Les dades
+  diuen que costa el mateix; el text de [CQ1] ho diu així, sense forçar-ho.
+- **Revisió de frases:** es van suavitzar tres afirmacions que anaven més
+  enllà de les dades (efecte de la mètrica, causa del cost d'`update()`,
+  "lots grans" com a millora, quan 2000 no millora 1000).
+
+### Revisió externa de [CQ1]
+
+- **IA externa:** va recalcular les xifres de la secció de Chroma (quasi
+  totes correctes) i va trobar set problemes. El més greu: la conclusió
+  "els lots importen menys a Chroma (11×) que a PostgreSQL (230×)"
+  incomplia el criteri de comparació que el mateix document havia fixat
+  (C0 ≡ P0 + generació de P1). Amb el criteri correcte, PostgreSQL només
+  millora 2,5× i **la conclusió s'inverteix**.
+- **Claude Code:** va verificar cada punt amb les dades abans d'aplicar-lo
+  (els valors recalculats coincidien: 2,5×, 38,4 → 15,4 s, 137,8 ± 2,4 s,
+  20–23×, 14×). Tots set eren correctes: notació ambigua de la identitat,
+  *recall* sobregeneralitzat (només 20 veïns), "crida atòmica" sense font,
+  llegenda ambigua entre grid i càrrega oficial, factor de consulta només
+  vàlid per a L2 i "93 % més ràpid" ambigu.
+- **Lliçó:** la IA que redacta tendeix a comparar amb la xifra més
+  espectacular a mà (P0 sol) encara que contradigui el criteri declarat; una
+  segona revisió independent ho va detectar.
+
 ### 2026-09-27 — Eina per al document
 
 - **IA externa:** Quarto, Typst, Overleaf o Jupyter.

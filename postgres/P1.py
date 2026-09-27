@@ -57,7 +57,7 @@ from common import (  # noqa: E402
     DEFAULT_BATCH_SIZE,
     EMBEDDING_DIM,
     Timer,
-    batched,
+    generate_embeddings,
     get_model,
     n_batches,
     pg_config,
@@ -112,23 +112,6 @@ def read_sentences(conn) -> tuple[list[int], list[str], float]:
     ids = [r[0] for r in rows]
     texts = [r[1] for r in rows]
     return ids, texts, t.elapsed
-
-
-def generate_embeddings(texts: list[str], batch_size: int) -> tuple[np.ndarray, list[float]]:
-    """Phase 2: encode the sentences batch by batch; return vectors and times."""
-    model = get_model()
-    model.encode(texts[:8])  # warm-up: first call pays one-off initialisation
-
-    parts: list[np.ndarray] = []
-    times: list[float] = []
-    for batch in batched(texts, batch_size):
-        with Timer() as t:
-            parts.append(model.encode(list(batch), convert_to_numpy=True))
-        times.append(t.elapsed)
-    embeddings = np.vstack(parts).astype(np.float32, copy=False)
-    if embeddings.shape != (len(texts), EMBEDDING_DIM):
-        raise RuntimeError(f"unexpected embedding shape {embeddings.shape}")
-    return embeddings, times
 
 
 def recreate_table(conn) -> None:

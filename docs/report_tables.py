@@ -10,6 +10,7 @@ Tables are returned as Markdown strings (printed from a cell with
 
 from __future__ import annotations
 
+import itertools
 import json
 import sys
 from functools import cache
@@ -20,7 +21,9 @@ sys.path.insert(0, str(ROOT))
 
 from common import DEFAULT_BATCH_SIZE, RESULTS_DIR, load_queries  # noqa: E402
 
-METRIC_NAMES = {"l2": "L2", "cosine": "Cosinus", "cosine_unit": "Cosinus unitari (1 − a·b)"}
+METRIC_NAMES = {"l2": "L2", "cosine": "Cosinus", "cosine_unit": "Cosinus unitari (1 − a·b)",
+                "l2_nofilter": "L2, sense filtre (k + 1)",
+                "cosine_nofilter": "Cosinus, sense filtre (k + 1)"}
 
 
 @cache
@@ -35,9 +38,13 @@ def load(name: str) -> dict:
 
 
 def num(x: float, decimals: int = 3) -> str:
-    """Number with a decimal comma and thin-space thousands (Catalan style)."""
+    """Number in Catalan style: decimal comma, dot for thousands (2.754,5).
+
+    Plain ASCII on purpose: Quarto escapes non-ASCII characters (such as a
+    thin space) in inline ``{python}`` values.
+    """
     text = f"{x:,.{decimals}f}"
-    return text.replace(",", " ").replace(".", ",")
+    return text.replace(",", "#").replace(".", ",").replace("#", ".")
 
 
 def ms(seconds: float, decimals: int = 1) -> str:
@@ -72,10 +79,23 @@ def table(header: list[str], rows: list[list[str]], align: str, caption: str,
         "|" + "|".join(mark(a, w) for a, w in zip(align, widths)) + "|",
         *("| " + " | ".join(r) + " |" for r in rows),
         "",
-        f": {caption}",
+        # A plain paragraph, not pandoc's ": caption" syntax: Quarto drops that
+        # caption from tables printed by a code cell in the Typst/PDF output.
+        f"**Taula {next(_table_number)}.** {caption}",
         "",
     ]
     return "\n".join(lines)
+
+
+#: Tables are numbered in the order the report prints them.
+_table_number = itertools.count(1)
+
+
+def reset_table_numbers() -> None:
+    """Restart numbering at 1. Called at the top of the report: Quarto may keep
+    the Python kernel alive between renders, so module state would persist."""
+    global _table_number
+    _table_number = itertools.count(1)
 
 
 def _by_size(grid: list[dict]) -> dict[int, dict]:
@@ -115,12 +135,11 @@ def pg_batch_grid_table() -> str:
         ])
     reps = load("P0")["grid"][0]["repeats"]
     return table(
-        ["Mida de lot", "Lots (`INSERT`)", "Text: total (s)", "desv.",
-         "Embeddings: total (s)", "desv."],
+        ["Mida de lot", "Lots (`INSERT`)", "Text: total (s)", "desv. entre càrregues",
+         "Embeddings: total (s)", "desv. entre càrregues"],
         rows, "rrrrrr",
-        f"Temps total de càrrega de les 10.000 frases per mida de lot "
-        f"(mitjana i desviació de {reps} càrregues completes). "
-        f"En negreta, la mida triada.")
+        f"Temps **total** de càrrega de les 10.000 frases per mida de lot: mitjana "
+        f"i desviació entre {reps} càrregues completes. En negreta, la mida triada.")
 
 
 def pg_insert_stats_table() -> str:
@@ -135,10 +154,13 @@ def pg_insert_stats_table() -> str:
                      ("Emmagatzematge d'embeddings (P1)", store)):
         rows.append([label, str(s["n"]), ms(s["min"]), ms(s["max"]), ms(s["avg"]),
                      ms(s["std"]), pct(cv(s))])
+    reps = _by_size(p0["grid"])[DEFAULT_BATCH_SIZE]["repeats"]
     return table(
         ["Operació", "n", "mín (ms)", "màx (ms)", "mitjana (ms)", "desv. (ms)", "CV"],
         rows, "lrrrrrr",
-        f"Temps per lot de {DEFAULT_BATCH_SIZE} frases. CV = desviació / mitjana.",
+        f"Temps **per lot** de {DEFAULT_BATCH_SIZE} frases; n = lots mesurats "
+        f"(10 lots × {reps} càrregues per a l'emmagatzematge, 10 lots per a la generació). "
+        f"CV = desviació / mitjana.",
         widths=[36, 6, 11, 11, 13, 12, 8])
 
 
@@ -169,33 +191,68 @@ def pg_query_table() -> str:
     return table(
         ["Mètrica", "n", "mín (ms)", "màx (ms)", "mitjana (ms)", "desv. (ms)", "CV"],
         rows, "lrrrrrr",
-        f"Temps del top-{p2['k']} per consulta ({p2['repeats']} rondes × 10 consultes). "
+        f"Temps **per consulta** del top-{p2['k']}; n = 10 consultes × {p2['repeats']} rondes. "
         f"El cosinus unitari és una variant de referència, no una tercera mètrica.")
 
 
-def code_lines(script: str) -> int:
-    """Lines of code of a script: no blank lines, comments or docstrings.
+#: Criterion for comparing code size between systems: only the top-level
+#: definitions that talk to the system (schema/collections, SQL, loading and
+#: querying). Excluded everywhere: validation, reference-only variants,
+#: embedding generation (identical for every system), CLI, printing and
+#: common.py.
+SYSTEM_CODE = {
+    "postgres/P0.py": ["DDL", "INSERT_SQL", "recreate_table", "insert_values", "load"],
+    "postgres/P1.py": ["DDL", "INSERT_SQL", "INSERT_TEMPLATE", "to_literal",
+                       "read_sentences", "recreate_table", "store"],
+    "postgres/P2.py": ["FUNCTIONS_SQL", "TOP_K_SQL", "install_functions", "top_k"],
+    "chroma/C0.py": ["default_embedding_function", "recreate_collection", "load"],
+    "chroma/C1.py": ["read_documents", "store"],
+    "chroma/C2.py": ["top_k"],
+}
 
-    Embedded SQL counts: it is code the system forced us to write.
+
+def code_lines(script: str, names: list[str] | None = None) -> int:
+    """Lines of code: no blank lines, comments or docstrings.
+
+    With ``names``, only the lines of those top-level definitions (functions
+    or assignments) are counted. Embedded SQL counts: it is code the system
+    forced us to write.
     """
     import ast
     import io
     import tokenize
 
     source = (ROOT / script).read_text(encoding="utf-8")
+    tree = ast.parse(source)
     docstring_lines: set[int] = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)) and ast.get_docstring(node):
             doc = node.body[0]
             docstring_lines.update(range(doc.lineno, doc.end_lineno + 1))
+
+    wanted: set[int] | None = None
+    if names is not None:
+        wanted = set()
+        for node in tree.body:
+            node_names = (
+                [node.name] if isinstance(node, ast.FunctionDef)
+                else [t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)]
+            )
+            if set(node_names) & set(names):
+                wanted.update(range(node.lineno, node.end_lineno + 1))
+
     code: set[int] = set()
     for tok in tokenize.generate_tokens(io.StringIO(source).readline):
         if tok.type in (tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT,
                         tokenize.DEDENT, tokenize.ENDMARKER):
             continue
         code.update(line for line in range(tok.start[0], tok.end[0] + 1)
-                    if line not in docstring_lines)
+                    if line not in docstring_lines and (wanted is None or line in wanted))
     return len(code)
+
+
+def system_lines(script: str) -> int:
+    return code_lines(script, SYSTEM_CODE[script])
 
 
 def pg_cost_table() -> str:
@@ -204,17 +261,20 @@ def pg_cost_table() -> str:
     text_calls = _by_size(p0["grid"])[DEFAULT_BATCH_SIZE]["db_calls"]["statements"]
     emb_calls = _by_size(p1["grid"])[DEFAULT_BATCH_SIZE]["db_calls"]["statements"]
     rows = [
-        ["P0 (text)", str(code_lines("postgres/P0.py")),
+        ["P0 (text)", str(system_lines("postgres/P0.py")), str(code_lines("postgres/P0.py")),
          f"{text_calls} `INSERT` + {text_calls} `COMMIT`"],
-        ["P1 (embeddings)", str(code_lines("postgres/P1.py")),
+        ["P1 (embeddings)", str(system_lines("postgres/P1.py")), str(code_lines("postgres/P1.py")),
          f"1 `SELECT` + {emb_calls} `INSERT` + {emb_calls} `COMMIT`"],
-        ["P2 (similitud)", str(code_lines("postgres/P2.py")),
+        ["P2 (similitud)", str(system_lines("postgres/P2.py")), str(code_lines("postgres/P2.py")),
          "1 crida a `top_k_similar` per consulta i mètrica"],
     ]
-    return table(["Script", "Línies de codi", "Crides a la BD (càrrega oficial)"], rows, "lrl",
-                 "Cost en codi i crides. Les línies inclouen el SQL i les comprovacions; "
-                 "no inclouen comentaris ni docstrings.",
-                 widths=[22, 16, 62])
+    return table(["Script", "Línies (sistema)", "Línies (total)", "Crides a la BD (càrrega oficial)"],
+                 rows, "lrrl",
+                 "Cost en codi i crides. *Línies (sistema)*: només el codi que parla amb la "
+                 "BD (DDL, SQL, càrrega i consultes); sense validacions, variants de "
+                 "referència, generació d'embeddings, línia d'ordres ni les utilitats de "
+                 "`common.py`. *Línies (total)*: el script sencer. Mai comentaris ni docstrings.",
+                 widths=[20, 14, 12, 54])
 
 
 # --------------------------------------------------------------------------
@@ -310,6 +370,282 @@ class PG:
 
     @staticmethod
     def identity_error() -> str:
-        e = load("P2")["validation"]["max_abs_error_l2sq_vs_2cos"]
-        mantissa, exp = f"{e:.0e}".split("e")
-        return f"{mantissa}·10^{int(exp)}^"
+        return sci(load("P2")["validation"]["max_abs_error_l2sq_vs_2cos"])
+
+
+def sci(x: float) -> str:
+    """Order of magnitude in Markdown: 1.3e-07 -> 1·10^-7^."""
+    mantissa, exp = f"{x:.0e}".split("e")
+    return f"{mantissa}·10^{int(exp)}^"
+
+
+# --------------------------------------------------------------------------
+# Chroma
+# --------------------------------------------------------------------------
+
+STATS_HEADER = ["Operació", "n", "mín (ms)", "màx (ms)", "mitjana (ms)", "desv. (ms)", "CV"]
+
+
+def _stats_row(label: str, s: dict) -> list[str]:
+    return [label, str(s["n"]), ms(s["min"]), ms(s["max"]), ms(s["avg"]), ms(s["std"]),
+            pct(cv(s))]
+
+
+def chroma_batch_grid_table() -> str:
+    """Total C0 load time (text + ONNX embeddings inside add()) per batch size."""
+    c0 = load("C0")
+    p0 = _by_size(load("P0")["grid"])
+    # Fair PostgreSQL counterpart of C0: storing the text (P0, same batch size)
+    # plus generating the embeddings (P1), since C0's add() does both.
+    generation = load("P1")["generate"]["batch_time"]["total"]
+    rows = []
+    for g in c0["grid"]:
+        size = g["batch_size"]
+        rows.append([
+            f"**{size}**" if size == DEFAULT_BATCH_SIZE else str(size),
+            str(g["db_calls"]["add"]),
+            num(g["total_time"]["avg"], 1),
+            ms(g["batch_time"]["avg"]),
+            (num(g["total_time"]["avg"] / (p0[size]["total_time"]["avg"] + generation), 1)
+             if size in p0 else "–"),
+        ])
+    return table(
+        ["Mida de lot", "Crides `add()`", "Total (s)", "Per `add()` (ms)", "× PostgreSQL"],
+        rows, "rrrrr",
+        f"`C0`: temps **total** de càrrega de les 10.000 frases a la col·lecció L2 per mida "
+        f"de lot, dins el grid ({c0['grid'][0]['repeats']} càrrega per mida; les 3 càrregues "
+        f"oficials a la mida triada són a la Taula següent i al text). Inclou el càlcul dels "
+        f"embeddings ONNX dins l'`add()`. *× PostgreSQL*: vegades el temps de fer el mateix a "
+        f"PostgreSQL, és a dir, `P0` a la mateixa mida més la generació d'embeddings de `P1`. "
+        f"En negreta, la mida triada.",
+        widths=[14, 16, 14, 18, 14])
+
+
+def chroma_insert_stats_table() -> str:
+    """min/max/avg/std per batch at the chosen size for every Chroma insertion step."""
+    c0, c1, p1 = load("C0"), load("C1"), load("P1")
+    rows = [
+        _stats_row(f"`add()` text + embedding ONNX, {METRIC_NAMES[m]} (C0)", o["batch_time"])
+        for m, o in c0["official"].items()
+    ]
+    if "embedding_only" in c0:
+        rows.append(_stats_row("Només embedding ONNX, referència (C0)",
+                               c0["embedding_only"]["batch_time"]))
+    rows.append(_stats_row("Generació d'embeddings, nostre model (C1)",
+                           c1["generate"]["batch_time"]))
+    rows += [_stats_row(f"`update()` embeddings, {METRIC_NAMES[m]} (C1)", s["batch_time"])
+             for m, s in c1["store"].items()]
+    rows.append(_stats_row("*Ref.: emmagatzematge d'embeddings a PostgreSQL (P1)*",
+                           _by_size(p1["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]))
+    return table(
+        STATS_HEADER, rows, "lrrrrrr",
+        f"Temps **per lot** de {DEFAULT_BATCH_SIZE} frases a Chroma; n = lots mesurats "
+        f"(10 per càrrega: {c0['official']['l2']['repeats']} càrregues a L2 i 1 a cosinus a "
+        f"`C0`; 1 càrrega a `C1`; la fila *Només embedding* és una passada de la funció ONNX "
+        f"sobre els mateixos 10 lots, sense desar res). L'última fila és la de PostgreSQL, "
+        f"per comparar.",
+        widths=[40, 5, 11, 11, 13, 12, 8])
+
+
+def chroma_query_table() -> str:
+    c2 = load("C2")
+    recall = c2["validation"].get("recall_vs_P2", {})
+    rows = []
+    for metric, t in c2["timing"].items():
+        s = t["query_time"]
+        rows.append([METRIC_NAMES.get(metric, metric), str(s["n"]), ms(s["min"], 2),
+                     ms(s["max"], 2), ms(s["avg"], 2), ms(s["std"], 2), pct(cv(s)),
+                     pct(recall[metric]) if metric in recall else "–"])
+    return table(
+        ["Mètrica", "n", "mín (ms)", "màx (ms)", "mitjana (ms)", "desv. (ms)", "CV",
+         "Recall vs P2"],
+        rows, "lrrrrrrr",
+        f"`C2`: temps **per consulta** del top-{c2['k']} (`get()` + `query()`); "
+        f"n = 10 consultes × {c2['repeats']} rondes. *Recall*: part dels veïns exactes de "
+        f"`P2` que retorna l'índex HNSW. Les files *sense filtre* són una variant de "
+        f"referència: demanen k + 1 veïns i descarten la pròpia frase a Python.")
+
+
+def chroma_cost_table() -> str:
+    """Code lines and calls of each Chroma script."""
+    c0, c1 = load("C0"), load("C1")
+    adds = next(iter(c0["official"].values()))["db_calls"]["add"]
+    updates = next(iter(c1["store"].values()))["db_calls"]["update"]
+    n_coll = len(c0["official"])
+    rows = [
+        ["C0 (text)", str(system_lines("chroma/C0.py")), str(code_lines("chroma/C0.py")),
+         f"{adds} `add()` × {n_coll} col·leccions"],
+        ["C1 (embeddings)", str(system_lines("chroma/C1.py")), str(code_lines("chroma/C1.py")),
+         f"1 `get()` + {updates} `update()` × {n_coll} col·leccions"],
+        ["C2 (similitud)", str(system_lines("chroma/C2.py")), str(code_lines("chroma/C2.py")),
+         "2 crides (`get()` + `query()`) per consulta i mètrica"],
+    ]
+    return table(["Script", "Línies (sistema)", "Línies (total)", "Crides a Chroma (càrrega oficial)"],
+                 rows, "lrrl",
+                 "Cost en codi i crides a Chroma, amb el mateix criteri de línies que a "
+                 "PostgreSQL. No hi ha cap `COMMIT`: Chroma no té transaccions explícites.",
+                 widths=[20, 14, 12, 54])
+
+
+class CH:
+    """Named values used inline in the Chroma section."""
+
+    @staticmethod
+    def _grid(size: int) -> dict:
+        return _by_size(load("C0")["grid"])[size]
+
+    @classmethod
+    def load_row_by_row_min(cls) -> str:
+        return num(cls._grid(1)["total_time"]["avg"] / 60, 1)
+
+    @classmethod
+    def load_default(cls) -> str:
+        return num(cls._grid(DEFAULT_BATCH_SIZE)["total_time"]["avg"], 1)
+
+    @classmethod
+    def load_speedup(cls) -> str:
+        return num(cls._grid(1)["total_time"]["avg"]
+                   / cls._grid(DEFAULT_BATCH_SIZE)["total_time"]["avg"], 0)
+
+    @classmethod
+    def add_row_by_row_ms(cls) -> str:
+        return ms(cls._grid(1)["batch_time"]["avg"], 0)
+
+    @classmethod
+    def add_vs_pg_row(cls) -> str:
+        """How many times more a 1-row add() costs than a 1-row INSERT (P0)."""
+        pg = _by_size(load("P0")["grid"])[1]["batch_time"]["avg"]
+        return num(cls._grid(1)["batch_time"]["avg"] / pg, 0)
+
+    @staticmethod
+    def embedding_share() -> str:
+        """Share of an add() batch spent computing ONNX embeddings (per-batch means)."""
+        c0 = load("C0")
+        add = c0["official"]["l2"]["batch_time"]["avg"]
+        return pct(c0["embedding_only"]["batch_time"]["avg"] / add)
+
+    @staticmethod
+    def add_store_ms() -> str:
+        """Per batch: add() minus ONNX embedding = what storing costs inside add()."""
+        c0 = load("C0")
+        return ms(c0["official"]["l2"]["batch_time"]["avg"]
+                  - c0["embedding_only"]["batch_time"]["avg"], 0)
+
+    @staticmethod
+    def update_ms(metric: str = "l2") -> str:
+        return ms(load("C1")["store"][metric]["batch_time"]["avg"], 0)
+
+    @staticmethod
+    def filter_same() -> str:
+        """Answers identical with and without the where filter (queries x metrics)."""
+        v = load("C2")["validation"]
+        return f"{v['same_top_k_filter_vs_nofilter']}/{2 * v['queries']}"
+
+    @staticmethod
+    def cosine_changed() -> str:
+        """Vectors that the cosine collection stored with a (rounding) change."""
+        return num(load("C1")["validation"]["vectors_changed"]["cosine"], 0)
+
+    @staticmethod
+    def cosine_change() -> str:
+        return sci(load("C1")["validation"]["roundtrip_max_abs_error"]["cosine"])
+
+    @staticmethod
+    def pg_equiv_speedup() -> str:
+        """Same row-by-row vs. default ratio for PostgreSQL's equivalent of C0:
+        P0 at that batch size plus P1's (always batched) generation."""
+        grid = _by_size(load("P0")["grid"])
+        gen = load("P1")["generate"]["batch_time"]["total"]
+        return num((grid[1]["total_time"]["avg"] + gen)
+                   / (grid[DEFAULT_BATCH_SIZE]["total_time"]["avg"] + gen), 1)
+
+    @staticmethod
+    def pg_equiv(size: int) -> str:
+        grid = _by_size(load("P0")["grid"])
+        return num(grid[size]["total_time"]["avg"] + load("P1")["generate"]["batch_time"]["total"], 1)
+
+    @staticmethod
+    def official_load_avg() -> str:
+        return num(load("C0")["official"]["l2"]["total_time"]["avg"], 1)
+
+    @staticmethod
+    def official_load_std() -> str:
+        return num(load("C0")["official"]["l2"]["total_time"]["std"], 1)
+
+    @staticmethod
+    def nofilter_factor(metric: str = "l2") -> str:
+        """How many times faster the query is without the where filter."""
+        t = load("C2")["timing"]
+        return num(t[metric]["query_time"]["avg"] / t[f"{metric}_nofilter"]["query_time"]["avg"], 0)
+
+    @staticmethod
+    def official_load_cv() -> str:
+        """Variation of the total time across the official l2 loads."""
+        return pct(cv(load("C0")["official"]["l2"]["total_time"]))
+
+    @staticmethod
+    def metric_insert_diff() -> str:
+        """Relative difference of the per-batch add() time, cosine vs. l2."""
+        o = load("C0")["official"]
+        return pct(abs(o["cosine"]["batch_time"]["avg"] / o["l2"]["batch_time"]["avg"] - 1))
+
+    @staticmethod
+    def onnx_vs_model() -> str:
+        """How many times slower Chroma's ONNX embedding is than our model."""
+        onnx = load("C0")["embedding_only"]["batch_time"]["total"]
+        ours = load("C1")["generate"]["batch_time"]["total"]
+        return num(onnx / ours, 1)
+
+    @staticmethod
+    def onnx_diff() -> str:
+        diff = load("C1")["validation"]["onnx_vs_model_max_abs_diff"]
+        return sci(diff) if diff is not None else "(no mesurat)"
+
+    @staticmethod
+    def store_total(metric: str = "l2") -> str:
+        return num(load("C1")["store"][metric]["batch_time"]["total"], 2)
+
+    @staticmethod
+    def store_vs_pg() -> str:
+        """How many times faster update() is than P1's INSERT of REAL[] (per batch)."""
+        chroma = load("C1")["store"]["l2"]["batch_time"]["avg"]
+        pg = _by_size(load("P1")["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]["avg"]
+        return num(pg / chroma, 1)
+
+    @staticmethod
+    def read_time_ms() -> str:
+        return ms(load("C1")["read"]["time"], 0)
+
+    @staticmethod
+    def query_avg_ms(metric: str) -> str:
+        return ms(load("C2")["timing"][metric]["query_time"]["avg"], 1)
+
+    @staticmethod
+    def query_cv(metric: str) -> str:
+        return pct(cv(load("C2")["timing"][metric]["query_time"]))
+
+    @staticmethod
+    def query_speedup(metric: str) -> str:
+        """How many times faster C2 is than P2 for the same metric."""
+        c2 = load("C2")["timing"][metric]["query_time"]["avg"]
+        p2 = load("P2")["timing"][metric]["query_time"]["avg"]
+        return num(p2 / c2, 0)
+
+    @staticmethod
+    def recall(metric: str) -> str:
+        return pct(load("C2")["validation"]["recall_vs_P2"][metric])
+
+    @staticmethod
+    def nofilter_gain(metric: str = "l2") -> str:
+        """Time saved by asking k + 1 neighbours instead of the where filter."""
+        t = load("C2")["timing"]
+        return pct(1 - t[f"{metric}_nofilter"]["query_time"]["avg"] / t[metric]["query_time"]["avg"])
+
+    @staticmethod
+    def same_topk() -> str:
+        v = load("C2")["validation"]
+        return f"{v['same_top_k_l2_vs_cosine']}/{v['queries']}"
+
+    @staticmethod
+    def identity_error() -> str:
+        return sci(load("C2")["validation"]["max_abs_error_l2sq_vs_2cos"])

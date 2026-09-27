@@ -28,6 +28,7 @@ Regles d'aquest document (vegeu CLAUDE.md):
 
 ```{python}
 from report_tables import *
+reset_table_numbers()
 ```
 
 **Repositori (codi i chunk de dades):** <https://github.com/sgalans/CBDE---L1>
@@ -40,7 +41,13 @@ exactament el mateix split per frases (`data/sentences.parquet`:
 `all-MiniLM-L6-v2` (384 dimensions), que retorna vectors de **norma 1**. Les
 mètriques són **L2** i **cosinus**, i el top-2 exclou sempre la pròpia frase.
 Els temps es mesuren amb `time.perf_counter` en un únic portàtil (Intel Core
-i7-13700H, 16 GB, PostgreSQL 16 a Docker Desktop).
+i7-13700H, 16 GB, PostgreSQL 16 a Docker Desktop). La unitat de mesura és
+l'operació: **un lot** en les insercions i **una consulta** en la cerca. Les
+estadístiques (mínim, màxim, mitjana, desviació) es calculen sobre totes les
+operacions mesurades, i n = lots (o consultes) × repeticions; cada taula indica
+quantes repeticions s'han fet. La generació d'embeddings es mesura un sol cop,
+perquè és cara i determinista. Abans de cronometrar es fa un *warm-up*
+(càrrega del model, primera execució de les consultes) que no es compta.
 
 ```{python}
 #| output: asis
@@ -66,8 +73,12 @@ operadors de distància ni índexs per a ell.
 **Inserció per lots.** Cada lot és un únic `INSERT` multi-fila
 (`execute_values`) i un `COMMIT`, de manera que les crides a la BD són
 exactament el nombre de lots. S'ha provat un grid de mides (1 a 2000; la mida
-1 és el *baseline* fila a fila) i s'ha triat **1000**: 2000 guanya poc més i
-deixaria només 5 lots per calcular les estadístiques.
+1 és el *baseline* fila a fila) i s'ha triat **1000**, el punt on la corba
+s'aplana: més enllà, els guanys són marginals (centèsimes de segon per al text,
+i per als embeddings al límit del soroll ja des de ~500 files). Lots més grans
+només farien
+transaccions i missatges més grans (a `P1`, uns quants MB de SQL per lot) sense
+cap benefici.
 
 **El viatge dels vectors.** `P1` llegeix el text de la BD (1 `SELECT`,
 `{python} PG.read_time_ms()` ms), genera els embeddings a Python i els torna a
@@ -115,8 +126,8 @@ files la mida de lot deixa d'importar**: el coll d'ampolla ja no són les crides
 sinó convertir 384 floats per vector a text i tornar-los a analitzar. Desar-los
 costa `{python} PG.emb_vs_text()` vegades més que desar el text de les mateixes
 files: és el preu de l'*impedance mismatch*. La generació
-(`{python} PG.generate_total()` s en total) és el cost més gran, però és
-idèntica per a qualsevol sistema.
+(`{python} PG.generate_total()` s en total) és el cost més gran, però és un
+cost de Python que no depèn de la base de dades.
 
 **Són estables els temps de consulta? Hi ha diferències entre mètriques?** Sí,
 són estables (CV `{python} PG.query_cv("l2")` per a L2 i
@@ -164,21 +175,161 @@ calcula tres sumes (producte escalar i dues normes) en lloc d'una.
 
 ## Decisions de disseny
 
-TODO: dues col·leccions (una per mètrica); `C0` amb la funció d'embeddings
-per defecte (text i vector inseparables a l'`add()`); `C1` llegeix el text de
-Chroma, genera amb el nostre model i fa `update()`; mida de lot.
+**Model de dades i client.** A Chroma la unitat és el registre d'una
+col·lecció: un identificador, **un vector** i, opcionalment, el document (el
+text) i unes metadades. El vector és l'element central i el text n'és un
+atribut, just a l'inrevés que a PostgreSQL. Cada registre guarda com a
+metadades `sentence_id`, `chunk_id` i `pos`, de manera que el split és el
+mateix que a PostgreSQL. S'ha fet servir el client integrat
+(`PersistentClient`): Chroma s'executa dins el mateix procés de Python i
+desa les dades en un directori local, sense passar per la xarxa. Cal tenir-ho
+present en comparar temps amb PostgreSQL, on cada crida és una anada i
+tornada per TCP.
+
+**Una col·lecció per mètrica.** La distància es fixa en crear la col·lecció
+(`configuration={"hnsw": {"space": ...}}`), perquè determina com es
+construeix l'índex HNSW, i no es pot triar a cada consulta. Per tenir L2 i
+cosinus calen dues col·leccions (`sentences_l2` i `sentences_cosine`) amb les
+mateixes dades: el doble d'emmagatzematge i el doble d'índexs. A PostgreSQL,
+en canvi, una sola taula serveix per a qualsevol funció de distància.
+
+**`C0`: el text no es pot inserir sense vector.** Sense funció d'embeddings,
+`add(documents=...)` llança un error; amb la funció per defecte (una versió
+ONNX del mateix `all-MiniLM-L6-v2`), és el mateix `add()` qui calcula els
+vectors. S'ha fet servir aquesta segona opció, que és l'ús natural de Chroma,
+amb el mateix grid de mides de lot que a PostgreSQL i un *warm-up* previ del
+model ONNX. La conseqüència és que el temps d'"inserir el text" **inclou per
+força la generació dels embeddings**: no es pot comparar amb `P0` sol, sinó
+amb `P0` més la generació de `P1`. Aquesta comparació és aproximada, perquè
+també enfronta dos entorns d'execució del model (ONNX a Chroma, PyTorch a
+`P1`). A la càrrega oficial, que omple les dues col·leccions, els embeddings
+es calculen dues vegades, una per col·lecció. Per limitar el temps
+d'execució, el grid de mides es fa només a la col·lecció L2 i amb una sola
+càrrega per mida; a la mida triada (1000), en canvi, la col·lecció L2 es
+carrega 3 vegades, com a PostgreSQL, per poder comparar l'estabilitat entre
+càrregues.
+
+**`C1`: substituir els vectors pels del nostre model.** Com a `P1`, el script
+llegeix els documents de la mateixa base de dades (un `get()`), genera els
+embeddings amb el model compartit amb PostgreSQL i els desa amb
+`update(ids, embeddings)` per lots a cada col·lecció. Així els tres sistemes
+cerquen sobre exactament els mateixos vectors. La diferència amb `P1` és que
+Chroma rep directament l'array de numpy: no hi ha cap conversió
+float → text → float.
+
+**`C2`: consulta amb índex i sense cerca per identificador.** Chroma no permet
+buscar els veïns d'un registre pel seu id: `query()` necessita el vector. Cada
+consulta són, doncs, dues crides: `get()` per obtenir el vector desat de la
+frase i `query()` amb `n_results = 2` i el filtre de metadades
+`where={"sentence_id": {"$ne": id}}`, que exclou la pròpia frase. La cerca
+passa per l'índex HNSW i és **aproximada**; els resultats exactes de `P2`
+serveixen de referència per mesurar-ne el *recall*. A més, l'espai `l2` de
+Chroma retorna la distància euclidiana **al quadrat**.
+
+```{python}
+#| output: asis
+print(chroma_cost_table())
+```
 
 ## [CQ1]
 
-**Estabilitat dels temps d'inserció.**
-TODO.
+**Són estables els temps d'inserció de text i embeddings?** Sí. A la mida
+triada, cada lot d'`add()` varia poc (CV per lot a la taula següent) i el
+temps total de les `{python} str(load("C0")["official"]["l2"]["repeats"])`
+càrregues oficials a L2 és de `{python} CH.official_load_avg()` s, amb una
+desviació de `{python} CH.official_load_std()` s entre càrregues
+(`{python} CH.official_load_cv()`). La raó és que
+l'`add()` és gairebé tot càlcul: **el `{python} CH.embedding_share()` del temps
+d'un lot és generar els embeddings ONNX** (fila *Només embedding*), una
+feina regular que depèn del nombre de frases i no de l'estat del sistema.
 
-**Estabilitat dels temps de consulta, diferències entre mètriques i
-mesura separada de text i embeddings.**
-TODO.
+```{python}
+#| output: asis
+print(chroma_batch_grid_table())
+print(chroma_insert_stats_table())
+```
 
-**Millores possibles a Chroma.**
-TODO.
+D'aquí surten tres conclusions. (1) **Els lots ajuden més a Chroma que a
+PostgreSQL, si es compara el mateix treball.** A Chroma, passar de fila a
+fila (`{python} CH.load_row_by_row_min()` min) a lots de 1000
+(`{python} CH.load_default()` s, al grid) redueix el temps
+`{python} CH.load_speedup()` vegades. L'equivalent a PostgreSQL (`P0` a la
+mateixa mida més la generació de `P1`) passa de `{python} CH.pg_equiv(1)` s a
+`{python} CH.pg_equiv(1000)` s, només `{python} CH.pg_equiv_speedup()`
+vegades, perquè a `P1` la generació es fa sempre per lots, sigui quina sigui
+la mida del lot d'inserció. A Chroma, en canvi, el model s'executa dins
+l'`add()` amb el mateix lot, i amb una sola frase l'ONNX és molt ineficient:
+un `add()` d'una frase costa `{python} CH.add_row_by_row_ms()` ms,
+`{python} CH.add_vs_pg_row()` vegades un `INSERT` d'una fila.
+(2) **La mètrica afecta poc la inserció**: amb lots de 1000, la col·lecció
+de cosinus (una sola càrrega) difereix un `{python} CH.metric_insert_diff()`
+de la d'L2, una diferència petita i propera a la variació entre lots.
+(3) **Desar els vectors no és més barat que a PostgreSQL**: tot i rebre
+l'array de numpy directament, sense passar per text, un `update()` de 1000
+vectors triga `{python} CH.update_ms()` ms, pràcticament el mateix que
+l'`INSERT` de `REAL[]` de `P1` (ràtio `{python} CH.store_vs_pg()`). Cal tenir
+en compte que Chroma, a més d'escriure el vector, l'ha d'inserir a l'índex
+HNSW; dins l'`add()`, la part que no és embedding costa
+`{python} CH.add_store_ms()` ms per lot.
+
+**Són estables els temps de consulta? Hi ha diferències entre mètriques?** Sí
+(CV `{python} CH.query_cv("l2")` per a L2 i `{python} CH.query_cv("cosine")`
+per al cosinus). Una consulta triga uns 13 ms, **entre
+`{python} CH.query_speedup("l2")` (L2) i `{python} CH.query_speedup("cosine")`
+(cosinus) vegades menys que a PostgreSQL**. Tot i que l'índex HNSW és
+aproximat, en les 10 consultes ha recuperat **tots els veïns exactes** de `P2`
+(*recall* del `{python} CH.recall("l2")` en totes dues mètriques); és una
+mostra petita (20 veïns), però indica que a aquesta escala l'aproximació no
+té cost visible.
+
+```{python}
+#| output: asis
+print(chroma_query_table())
+```
+
+Com a PostgreSQL, les dues col·leccions retornen **el mateix top-2 en
+`{python} CH.same_topk()` consultes** i les distàncies compleixen la identitat
+($|d_{l2} - 2\,d_{cos}| \le$ `{python} CH.identity_error()`, on $d_{l2}$ és
+el valor que retorna Chroma, que ja és $\lVert a-b \rVert^2$). Els temps
+tampoc no difereixen: l'índex fa la mateixa feina amb qualsevol mètrica. Un
+detall: l'espai `cosine` **torna a normalitzar els vectors en desar-los**, i
+`{python} CH.cosine_changed()` dels 10.000 vectors no s'hi guarden exactament
+com es van enviar (diferència màxima `{python} CH.cosine_change()`).
+
+**Es pot mesurar per separat la inserció del text i la creació d'embeddings?**
+**No de manera nativa.** Chroma no accepta un registre sense vector, i amb la
+funció d'embeddings per defecte el vector es calcula dins el mateix `add()`:
+el temps "d'inserir text" de `C0` inclou la generació. Només s'ha pogut
+aproximar la separació per fora: mesurant la funció d'embeddings sola
+(`{python} CH.embedding_share()` de l'`add()`) i, a `C1`, generant els vectors
+per separat i substituint-los amb `update()`, cosa que obliga a escriure dues
+vegades cada vector. La conclusió és l'invers de PostgreSQL: allà el vector
+era un afegit al text; aquí el text és un atribut del vector, i és el text el
+que no té una existència independent.
+
+**Quines tècniques de Chroma millorarien el rendiment?**
+
+- *Generar els embeddings fora i passar-los a l'`add()`.* La funció per
+  defecte (ONNX) és `{python} CH.onnx_vs_model()` vegades més lenta que el
+  mateix model amb PyTorch a `C1`, i a més es calcula un cop per col·lecció.
+  Passant `embeddings=` s'evitarien totes dues coses.
+- *Una sola col·lecció.* Amb vectors normalitzats, L2, cosinus i producte
+  escalar ordenen igual: una sola col·lecció serviria les dues mètriques i
+  estalviaria la meitat d'emmagatzematge i d'inserció.
+- *Evitar el filtre de metadades.* Demanar un veí més (k + 1) i descartar la
+  pròpia frase a Python dona el mateix resultat (`{python} CH.filter_same()`)
+  i redueix el temps de consulta un `{python} CH.nofilter_gain()`, és a dir,
+  és unes `{python} CH.nofilter_factor()` vegades més ràpid: el filtre `where` afegeix
+  un pas sobre les metadades a una cerca que, sense ell, només recorre
+  l'índex HNSW.
+- *Paràmetres d'HNSW.* `ef_search`, `max_neighbors` i `ef_construction`
+  permeten intercanviar temps per *recall*, que aquí ja és del 100 %, i per
+  tant hi ha marge per abaratir la construcció i la cerca; `batch_size` i
+  `sync_threshold` controlen cada quants vectors s'actualitza i es persisteix
+  l'índex, i afecten el cost de la inserció. Per a càrregues
+  concurrents, el mode client-servidor. En canvi, lots més grans no
+  ajudarien: amb el model dins l'`add()`, més enllà de ~500 frases el temps
+  ja no baixa.
 
 # pgvector
 

@@ -35,7 +35,7 @@ De cada sèrie de temps: **mínim, màxim, mitjana i desviació estàndard**.
 | Mètriques de distància | **Euclidiana (L2)** i **Cosinus** — a tots tres sistemes. **Sense L1** (vegeu nota) |
 | PostgreSQL | via **Docker** (`docker-compose.yml` a l'arrel), no instal·lació local. Imatge **`pgvector/pgvector:pg16`** per a tot (vegeu nota) |
 | Connexió a Postgres | `common.pg_config()`: per defecte **`127.0.0.1:5432`** (no `localhost`: a Windows es resol a IPv6 i Docker Desktop hi afegeix ~45 ms per missatge de 32–70 KB, verificat), usuari/contrasenya `cbde`, iguals que el `docker-compose.yml` i a totes les màquines. Sense `.env`; només es poden sobreescriure amb les variables `PG*` |
-| Mides de lot | Grid **únic** per a `P0`/`P1`, `C0` i `G0`/`G1`: `common.BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)`; la mida 1 és el baseline fila a fila. Càrrega "oficial" amb **`common.DEFAULT_BATCH_SIZE = 1000`**, triada amb el grid de `P0`: un 28 % més ràpida que 500; 2000 només guanya un 15 % més i deixaria només 5 lots per a les estadístiques. Cap script defineix el seu propi grid |
+| Mides de lot | Grid **únic** per a `P0`/`P1`, `C0` i `G0`/`G1`: `common.BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)`; la mida 1 és el baseline fila a fila. Càrrega "oficial" amb **`common.DEFAULT_BATCH_SIZE = 1000`**, triada amb el grid de `P0`/`P1` pel punt on la corba s'aplana: per al text 2000 gairebé no millora, per als embeddings a partir de ~500 no hi ha guany mesurable (dins la desviació), i lots més grans només fan transaccions i missatges més grans. Al document, justificar-ho **pel comportament del sistema**, no per "tenir més lots per a les estadístiques". Cap script defineix el seu propi grid |
 | Base de dades pgvector | `cbde_pgvector`, creada per `docker/init/01-create-pgvector-db.sql` en la primera arrencada del volum (o a mà, vegeu README). `G0` ha de fallar amb un missatge clar si no existeix |
 | Top-2 | **Sempre s'exclou la pròpia frase** de la consulta (`sentence_id` de `queries.json`) a `P2`, `C2` i `G2`: "els 2 més semblants entre *totes les altres* frases" |
 | Entorn Python | `.venv` creat a cada màquina (mai committejat), Python 3.13 |
@@ -116,6 +116,46 @@ No canviar a la imatge oficial `postgres`: no porta l'extensió.
 ### Chroma: decisions de disseny (C0/C1/C2)
 
 Verificat amb `chromadb` 1.5.9:
+
+- **Client integrat** (`common.chroma_client()` = `PersistentClient` a
+  `chroma/chroma_db/`, telemetria desactivada): Chroma corre dins el procés de
+  Python, sense xarxa, mentre que PostgreSQL passa per TCP. Cal dir-ho al
+  document en comparar temps. Alternativa no adoptada: servidor Chroma a Docker.
+- **Durada**: cada càrrega de `C0` recalcula els 10.000 embeddings (~15–20 s
+  a CPU); el grid complet, amb la mida 1 inclosa, pot trigar 10–15 min. S'ha
+  d'executar **en segon pla** i avisant abans. **No** es retallen mides del
+  grid per estalviar temps (trencaria el "grid únic").
+- **Comparabilitat de `C0`**: els seus temps inclouen la generació
+  d'embeddings (ONNX, dins l'`add()`), així que **no es comparen amb `P0` sol,
+  sinó amb `P0` + la generació de `P1`**. Cal dir-ho explícitament a la secció
+  de Chroma; és la prova de [CQ1] que text i vector no es poden separar.
+- **Càrrega oficial de `C0`**: **3 càrregues a `sentences_l2`** (com `P0`, per
+  poder comparar l'estabilitat entre càrregues a [CQ1]) i 1 a
+  `sentences_cosine` (`--official-repeats`). `--skip-grid` reaprofita el grid
+  i la referència d'embeddings del `results/C0.json` existent.
+- **Variant de referència a `C2`**: `l2_nofilter` / `cosine_nofilter` demanen
+  k + 1 veïns i descarten la pròpia frase a Python, per mesurar el cost del
+  filtre `where` ([CQ1] c). La resposta oficial manté l'exclusió dins la BD.
+- **`add()` − embedding = cost d'emmagatzemar a `C0`**: amb la referència
+  "només embedding ONNX" es pot comparar amb `update()` de `C1` (cost de
+  reubicar vectors a l'índex HNSW).
+- **Resultats verificats de Chroma** (per no reinterpretar-los): el 97 % d'un
+  `add()` és embedding ONNX; l'ONNX és ~9× més lent que el model PyTorch;
+  `update()` costa el mateix que l'`INSERT` de `P1` (no és més ràpid);
+  consultes ~20× més ràpides que `P2` amb *recall* 100 %; el filtre `where`
+  multiplica ~14× el temps de consulta. L'espai `cosine` **re-normalitza** els
+  vectors en desar-los (canvis ≤ 1,5e-8 en ~28 % dels vectors), per això la
+  validació de `C1` només exigeix igualtat exacta a `l2`.
+- **`onnx_vs_model_max_abs_diff` només és vàlid si `C1` s'executa just després
+  de `C0`**: si `C1` ja havia substituït els vectors, el JSON guarda `null`.
+  A les mesures oficials, executar sempre `C0 → C1 → C2` seguits.
+- **Grid de `C0` (decisió de l'equip, per temps)**: el grid complet només a la
+  col·lecció `sentences_l2` i amb **1 repetició** (a `P0` en són 3). La
+  càrrega oficial sí que es fa a les dues col·leccions. Que la mètrica afecti
+  poc la inserció **no es pot afirmar sense dades**: s'ha de citar la
+  comparació L2 vs. cosinus de la càrrega oficial (lots de 1000). Tampoc s'ha
+  de dir que la doble generació d'embeddings passa al grid: només passa a la
+  càrrega oficial.
 
 - **Dues col·leccions** amb les mateixes dades: `sentences_l2` i
   `sentences_cosine`. La mètrica es fixa en crear la col·lecció
@@ -209,7 +249,9 @@ CBDE---L1/
 Càrrega de dades (`load_sentences`, `load_chunks`, `load_queries`), cronòmetre
 (`Timer`), estadístiques (`stats` → min/max/avg/std), iteració per lots
 (`batched`), persistència de resultats (`save_results`), paràmetres de connexió
-a Postgres i constants del model. **Tot script nou ha de fer servir aquestes
+a Postgres, client i col·leccions de Chroma (`chroma_client`, `chroma_collections`, `CHROMA_COLLECTIONS`), constants
+del model i la generació d'embeddings per lots amb temps i *warm-up*
+(`generate_embeddings`, compartida per `P1`, `C1` i `G1`). **Tot script nou ha de fer servir aquestes
 utilitats**, no reimplementar-les.
 
 ## Entregables finals
@@ -262,6 +304,10 @@ code lines and calls made*). Per això, en escriure cada script:
   1 crida de funció per consulta i mètrica) i guardar-ho al `results/*.json`;
 - mantenir el codi específic de cada sistema compacte i comparable, perquè el
   nombre de línies es pugui comparar entre sistemes al document.
+- **Criteri de línies de codi** (`docs/report_tables.py`, `SYSTEM_CODE`): només les
+  definicions que interactuen amb el sistema (esquema/col·leccions, SQL, càrrega,
+  consulta). Fora: validacions, variants de referència, generació d'embeddings,
+  CLI i `common.py`. Per a cada script nou (C0–C2, G0–G2) cal afegir-hi la llista.
 
 ## Estil de treball
 

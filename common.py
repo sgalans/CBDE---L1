@@ -91,6 +91,40 @@ def pg_config(dbname: str = PG_DATABASE) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# Chroma
+# --------------------------------------------------------------------------
+
+#: On-disk store of the embedded (in-process) Chroma client; git-ignored.
+CHROMA_PATH = ROOT / "chroma" / "chroma_db"
+#: One collection per metric: Chroma fixes the distance when a collection is
+#: created, so the same data is stored twice.
+CHROMA_COLLECTIONS = {"l2": "sentences_l2", "cosine": "sentences_cosine"}
+
+
+def chroma_client():
+    """Persistent in-process Chroma client, with telemetry off.
+
+    Telemetry would make network calls from inside the timed sections.
+    """
+    import chromadb  # heavy import
+    from chromadb.config import Settings
+
+    return chromadb.PersistentClient(path=str(CHROMA_PATH),
+                                     settings=Settings(anonymized_telemetry=False))
+
+
+def chroma_collections(client) -> dict:
+    """The existing collections, keyed by metric; fails clearly if C0 was not run."""
+    collections = {}
+    for space, name in CHROMA_COLLECTIONS.items():
+        try:
+            collections[space] = client.get_collection(name)
+        except Exception as exc:  # noqa: BLE001 - chromadb raises several types
+            raise RuntimeError(f"collection '{name}' not found. Run chroma/C0.py first.") from exc
+    return collections
+
+
+# --------------------------------------------------------------------------
 # Data access
 # --------------------------------------------------------------------------
 
@@ -214,6 +248,31 @@ def batched(items: Sequence[Any], size: int) -> Iterator[Sequence[Any]]:
 
 def n_batches(total: int, size: int) -> int:
     return (total + size - 1) // size
+
+
+def generate_embeddings(texts: list[str], batch_size: int):
+    """Encode ``texts`` batch by batch with the shared model.
+
+    Returns ``(embeddings, times)``: a float32 array of shape
+    ``(len(texts), EMBEDDING_DIM)`` and the time of each batch. A warm-up call
+    runs first, outside the timing, so no batch pays one-off initialisation.
+    Used by P1, C1 and G1 so the three systems store identical vectors.
+    """
+    import numpy as np
+
+    model = get_model()
+    model.encode(texts[:8])
+
+    parts = []
+    times: list[float] = []
+    for batch in batched(texts, batch_size):
+        with Timer() as t:
+            parts.append(model.encode(list(batch), convert_to_numpy=True))
+        times.append(t.elapsed)
+    embeddings = np.vstack(parts).astype(np.float32, copy=False)
+    if embeddings.shape != (len(texts), EMBEDDING_DIM):
+        raise RuntimeError(f"unexpected embedding shape {embeddings.shape}")
+    return embeddings, times
 
 
 # --------------------------------------------------------------------------
