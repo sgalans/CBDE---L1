@@ -1,0 +1,692 @@
+{
+  "script": "P2",
+  "timestamp": "2026-09-27 18:49:19",
+  "k": 2,
+  "metrics": [
+    "l2",
+    "cosine"
+  ],
+  "reference_metrics": [
+    "cosine_unit"
+  ],
+  "repeats": 3,
+  "search": "exact (sequential scan, SQL functions over REAL[])",
+  "timing": {
+    "l2": {
+      "query_time": {
+        "n": 30,
+        "min": 0.24289829994086176,
+        "max": 0.30349169997498393,
+        "avg": 0.26261887667157374,
+        "std": 0.016427393014604292,
+        "total": 7.878566300147213
+      },
+      "per_query": {
+        "654": {
+          "n": 3,
+          "min": 0.2537687999429181,
+          "max": 0.30349169997498393,
+          "avg": 0.2743793999931465,
+          "std": 0.025928765361949737,
+          "total": 0.8231381999794394
+        },
+        "1114": {
+          "n": 3,
+          "min": 0.244618900003843,
+          "max": 0.2519275000086054,
+          "avg": 0.2471872333359594,
+          "std": 0.004109973154922223,
+          "total": 0.7415617000078782
+        },
+        "2025": {
+          "n": 3,
+          "min": 0.24289829994086176,
+          "max": 0.3000359000870958,
+          "avg": 0.2772216333542019,
+          "std": 0.030257565987847564,
+          "total": 0.8316649000626057
+        },
+        "3759": {
+          "n": 3,
+          "min": 0.2597214999841526,
+          "max": 0.2926623000530526,
+          "avg": 0.2709855999952803,
+          "std": 0.018777400168642832,
+          "total": 0.8129567999858409
+        },
+        "4281": {
+          "n": 3,
+          "min": 0.24435300007462502,
+          "max": 0.254932300071232,
+          "avg": 0.2512435667061557,
+          "std": 0.005972369655688014,
+          "total": 0.7537307001184672
+        },
+        "5250": {
+          "n": 3,
+          "min": 0.2490299999481067,
+          "max": 0.28411550004966557,
+          "avg": 0.2648027333198115,
+          "std": 0.017808620285601262,
+          "total": 0.7944081999594346
+        },
+        "6228": {
+          "n": 3,
+          "min": 0.2503811999922618,
+          "max": 0.270440399996005,
+          "avg": 0.25925990000056726,
+          "std": 0.010225780585515924,
+          "total": 0.7777797000017017
+        },
+        "7142": {
+          "n": 3,
+          "min": 0.25311509997118264,
+          "max": 0.26561899995431304,
+          "avg": 0.2594873666530475,
+          "std": 0.006255422209165906,
+          "total": 0.7784620999591425
+        },
+        "8754": {
+          "n": 3,
+          "min": 0.26033789990469813,
+          "max": 0.2720084000611678,
+          "avg": 0.26752416669235873,
+          "std": 0.00628696126304136,
+          "total": 0.8025725000770763
+        },
+        "9104": {
+          "n": 3,
+          "min": 0.2482142000226304,
+          "max": 0.2621593000367284,
+          "avg": 0.2540971666652088,
+          "std": 0.007223436116225562,
+          "total": 0.7622914999956265
+        }
+      },
+      "raw": [
+        0.2658777000615373,
+        0.2519275000086054,
+        0.3000359000870958,
+        0.2597214999841526,
+        0.254932300071232,
+        0.2612626999616623,
+        0.270440399996005,
+        0.26561899995431304,
+        0.26033789990469813,
+        0.2482142000226304,
+        0.30349169997498393,
+        0.2450152999954298,
+        0.2887307000346482,
+        0.2605729999486357,
+        0.2544453999726102,
+        0.28411550004966557,
+        0.2569581000134349,
+        0.2597280000336468,
+        0.27022620011121035,
+        0.2621593000367284,
+        0.2537687999429181,
+        0.244618900003843,
+        0.24289829994086176,
+        0.2926623000530526,
+        0.24435300007462502,
+        0.2490299999481067,
+        0.2503811999922618,
+        0.25311509997118264,
+        0.2720084000611678,
+        0.25191799993626773
+      ]
+    },
+    "cosine": {
+      "query_time": {
+        "n": 30,
+        "min": 0.2733842999441549,
+        "max": 0.37611180008389056,
+        "avg": 0.29600486665731296,
+        "std": 0.023327758105010254,
+        "total": 8.880145999719389
+      },
+      "per_query": {
+        "654": {
+          "n": 3,
+          "min": 0.2981945000356063,
+          "max": 0.3021617999766022,
+          "avg": 0.30037896664968383,
+          "std": 0.0020139138954960644,
+          "total": 0.9011368999490514
+        },
+        "1114": {
+          "n": 3,
+          "min": 0.28409049997571856,
+          "max": 0.3120154000353068,
+          "avg": 0.30196426665255177,
+          "std": 0.015519188270483535,
+          "total": 0.9058927999576554
+        },
+        "2025": {
+          "n": 3,
+          "min": 0.2738639999879524,
+          "max": 0.3227943000383675,
+          "avg": 0.3013073333228628,
+          "std": 0.025003045679166575,
+          "total": 0.9039219999685884
+        },
+        "3759": {
+          "n": 3,
+          "min": 0.27704269997775555,
+          "max": 0.37611180008389056,
+          "avg": 0.3112056667062764,
+          "std": 0.056236361641470806,
+          "total": 0.9336170001188293
+        },
+        "4281": {
+          "n": 3,
+          "min": 0.27787389990407974,
+          "max": 0.34071440005209297,
+          "avg": 0.31331353331916034,
+          "std": 0.03218226906295798,
+          "total": 0.939940599957481
+        },
+        "5250": {
+          "n": 3,
+          "min": 0.2744501999113709,
+          "max": 0.3107861999887973,
+          "avg": 0.2914644999740024,
+          "std": 0.01827756264689348,
+          "total": 0.8743934999220073
+        },
+        "6228": {
+          "n": 3,
+          "min": 0.27461419999599457,
+          "max": 0.2869185999734327,
+          "avg": 0.278944499984694,
+          "std": 0.006914298484402411,
+          "total": 0.8368334999540821
+        },
+        "7142": {
+          "n": 3,
+          "min": 0.2733842999441549,
+          "max": 0.3113170999567956,
+          "avg": 0.288029299932532,
+          "std": 0.02038989513325135,
+          "total": 0.864087899797596
+        },
+        "8754": {
+          "n": 3,
+          "min": 0.2871498999884352,
+          "max": 0.29125310003291816,
+          "avg": 0.2893089666807403,
+          "std": 0.002060026676231381,
+          "total": 0.867926900042221
+        },
+        "9104": {
+          "n": 3,
+          "min": 0.2742967000231147,
+          "max": 0.30269530008081347,
+          "avg": 0.28413163335062563,
+          "std": 0.016086118594009484,
+          "total": 0.8523949000518769
+        }
+      },
+      "raw": [
+        0.3021617999766022,
+        0.30978689994663,
+        0.30726369994226843,
+        0.2804625000571832,
+        0.3213523000013083,
+        0.28915710002183914,
+        0.2869185999734327,
+        0.27938649989664555,
+        0.2895239000208676,
+        0.27540289994794875,
+        0.3007805999368429,
+        0.28409049997571856,
+        0.2738639999879524,
+        0.27704269997775555,
+        0.27787389990407974,
+        0.3107861999887973,
+        0.2753006999846548,
+        0.2733842999441549,
+        0.29125310003291816,
+        0.30269530008081347,
+        0.2981945000356063,
+        0.3120154000353068,
+        0.3227943000383675,
+        0.37611180008389056,
+        0.34071440005209297,
+        0.2744501999113709,
+        0.27461419999599457,
+        0.3113170999567956,
+        0.2871498999884352,
+        0.2742967000231147
+      ]
+    },
+    "cosine_unit": {
+      "query_time": {
+        "n": 30,
+        "min": 0.21618820005096495,
+        "max": 0.2551581999287009,
+        "avg": 0.2270019799936563,
+        "std": 0.011517460079751098,
+        "total": 6.810059399809688
+      },
+      "per_query": {
+        "654": {
+          "n": 3,
+          "min": 0.21618820005096495,
+          "max": 0.24007170007098466,
+          "avg": 0.23009720002301037,
+          "std": 0.012418357803709684,
+          "total": 0.6902916000690311
+        },
+        "1114": {
+          "n": 3,
+          "min": 0.22593219997361302,
+          "max": 0.25495289999525994,
+          "avg": 0.23744666665637246,
+          "std": 0.015410263079607708,
+          "total": 0.7123399999691173
+        },
+        "2025": {
+          "n": 3,
+          "min": 0.21691900002770126,
+          "max": 0.21958429994992912,
+          "avg": 0.21831796667538583,
+          "std": 0.001337590979189859,
+          "total": 0.6549539000261575
+        },
+        "3759": {
+          "n": 3,
+          "min": 0.21647829993162304,
+          "max": 0.22348749998491257,
+          "avg": 0.21997823329487196,
+          "std": 0.0035046093477020014,
+          "total": 0.6599346998846158
+        },
+        "4281": {
+          "n": 3,
+          "min": 0.21756460005417466,
+          "max": 0.22974370000883937,
+          "avg": 0.22248776668372253,
+          "std": 0.006415915310257396,
+          "total": 0.6674633000511676
+        },
+        "5250": {
+          "n": 3,
+          "min": 0.2174583999440074,
+          "max": 0.25088459998369217,
+          "avg": 0.22892636666074395,
+          "std": 0.01902267022200893,
+          "total": 0.6867790999822319
+        },
+        "6228": {
+          "n": 3,
+          "min": 0.21797220001462847,
+          "max": 0.2551581999287009,
+          "avg": 0.23677533333345005,
+          "std": 0.018596561926645334,
+          "total": 0.7103260000003502
+        },
+        "7142": {
+          "n": 3,
+          "min": 0.22176269988995045,
+          "max": 0.23771590006072074,
+          "avg": 0.2276225332946827,
+          "std": 0.008778852570987459,
+          "total": 0.6828675998840481
+        },
+        "8754": {
+          "n": 3,
+          "min": 0.21997119998559356,
+          "max": 0.2258668999420479,
+          "avg": 0.22284933330956846,
+          "std": 0.002950322140000021,
+          "total": 0.6685479999287054
+        },
+        "9104": {
+          "n": 3,
+          "min": 0.2170390000101179,
+          "max": 0.23716500005684793,
+          "avg": 0.22551840000475445,
+          "std": 0.01043011680774528,
+          "total": 0.6765552000142634
+        }
+      },
+      "raw": [
+        0.2340316999470815,
+        0.25495289999525994,
+        0.21845060004852712,
+        0.22348749998491257,
+        0.22974370000883937,
+        0.25088459998369217,
+        0.2551581999287009,
+        0.23771590006072074,
+        0.2258668999420479,
+        0.22235119994729757,
+        0.21618820005096495,
+        0.23145490000024438,
+        0.21958429994992912,
+        0.21647829993162304,
+        0.21756460005417466,
+        0.2184361000545323,
+        0.23719560005702078,
+        0.22176269988995045,
+        0.22270990000106394,
+        0.23716500005684793,
+        0.24007170007098466,
+        0.22593219997361302,
+        0.21691900002770126,
+        0.21996889996808022,
+        0.22015499998815358,
+        0.2174583999440074,
+        0.21797220001462847,
+        0.2233889999333769,
+        0.21997119998559356,
+        0.2170390000101179
+      ]
+    }
+  },
+  "db_calls": {
+    "per_query_and_metric": 1,
+    "per_run": 20
+  },
+  "validation": {
+    "queries": 10,
+    "same_top_k_l2_vs_cosine": 10,
+    "same_top_k_as_numpy": 10,
+    "max_abs_error_l2sq_vs_2cos": 9.934726086235912e-08,
+    "same_top_k_cosine_vs_unit": 10,
+    "max_abs_error_cosine_vs_unit": 7.001704527276331e-08
+  },
+  "answers": [
+    {
+      "query_rank": 0,
+      "sentence_id": 654,
+      "text": "jasons face grinned in a seriously weird way that screamed , weirdo !",
+      "l2": [
+        {
+          "sentence_id": 651,
+          "distance": 0.745304936168252,
+          "text": "jasons face twisted up and a snort of laughter fought its way out of his nose ."
+        },
+        {
+          "sentence_id": 708,
+          "distance": 0.7547206385407496,
+          "text": "jason smiled but you could see he was hiding the anger in his face ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 651,
+          "distance": 0.27773970952269955,
+          "text": "jasons face twisted up and a snort of laughter fought its way out of his nose ."
+        },
+        {
+          "sentence_id": 708,
+          "distance": 0.2848015986618687,
+          "text": "jason smiled but you could see he was hiding the anger in his face ."
+        }
+      ]
+    },
+    {
+      "query_rank": 1,
+      "sentence_id": 1114,
+      "text": "it must have been some type of faery because i could see long , pointed ears sticking up from the sides of its head .",
+      "l2": [
+        {
+          "sentence_id": 31,
+          "distance": 0.9815633612016195,
+          "text": "out of my left eye i saw the outline of a creature ."
+        },
+        {
+          "sentence_id": 1370,
+          "distance": 0.9818417627720424,
+          "text": "she stood right in front of its head and opened her mouth , bizarre sounds started coming out ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 31,
+          "distance": 0.4817332983209909,
+          "text": "out of my left eye i saw the outline of a creature ."
+        },
+        {
+          "sentence_id": 1370,
+          "distance": 0.4820065811781137,
+          "text": "she stood right in front of its head and opened her mouth , bizarre sounds started coming out ."
+        }
+      ]
+    },
+    {
+      "query_rank": 2,
+      "sentence_id": 2025,
+      "text": "it involves lots of smart remarks and bad decisions involving life or death .",
+      "l2": [
+        {
+          "sentence_id": 2026,
+          "distance": 0.988261212751761,
+          "text": "it also involves a bad choice of a place where you roll around pretending like your life could be normal for a second ."
+        },
+        {
+          "sentence_id": 2734,
+          "distance": 1.057443530852824,
+          "text": "and that means questions , big life and death questions ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 2026,
+          "distance": 0.4883301163374696,
+          "text": "it also involves a bad choice of a place where you roll around pretending like your life could be normal for a second ."
+        },
+        {
+          "sentence_id": 2734,
+          "distance": 0.5590933926091763,
+          "text": "and that means questions , big life and death questions ."
+        }
+      ]
+    },
+    {
+      "query_rank": 3,
+      "sentence_id": 3759,
+      "text": "he was squinting at the thing with extreme concentration , like a successful young stock broker in an armani suit instead of a missionary in cut-off khaki shorts that really needed a haircut .",
+      "l2": [
+        {
+          "sentence_id": 2979,
+          "distance": 0.9148902128263776,
+          "text": "he was trying to pretend it was just a piece of dust he had to scrub from one eye , but the ruse was n't working very well ."
+        },
+        {
+          "sentence_id": 2902,
+          "distance": 0.9294611662039379,
+          "text": "the few inches of reddish , peachy fuzz dusting his chin at least showed that he had made the effort to be pious ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 2979,
+          "distance": 0.4185120839766854,
+          "text": "he was trying to pretend it was just a piece of dust he had to scrub from one eye , but the ruse was n't working very well ."
+        },
+        {
+          "sentence_id": 2902,
+          "distance": 0.4319490550410626,
+          "text": "the few inches of reddish , peachy fuzz dusting his chin at least showed that he had made the effort to be pious ."
+        }
+      ]
+    },
+    {
+      "query_rank": 4,
+      "sentence_id": 4281,
+      "text": "she took one last glance at wara but did n't seem to be concerned as she sauntered into the back room .",
+      "l2": [
+        {
+          "sentence_id": 5538,
+          "distance": 0.7080233730567447,
+          "text": "wara felt sick , watching him go out of the corner of her eye ."
+        },
+        {
+          "sentence_id": 6098,
+          "distance": 0.7149662092772402,
+          "text": "wara began wondering if she should be worried ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 5538,
+          "distance": 0.2506485458601143,
+          "text": "wara felt sick , watching him go out of the corner of her eye ."
+        },
+        {
+          "sentence_id": 6098,
+          "distance": 0.2555883401269602,
+          "text": "wara began wondering if she should be worried ."
+        }
+      ]
+    },
+    {
+      "query_rank": 5,
+      "sentence_id": 5250,
+      "text": "wara bit her lip , then strummed a chord .",
+      "l2": [
+        {
+          "sentence_id": 6094,
+          "distance": 0.7433959442741234,
+          "text": "wara pressed her lips together , really beginning to wonder why they were scuttling down a side stairway of univalle as if this were some sort of jailbreak ."
+        },
+        {
+          "sentence_id": 5102,
+          "distance": 0.7648623901205038,
+          "text": "wara bit her lip and reached up with one hand to push a stray piece of hair out of one eye ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 6094,
+          "distance": 0.27631875949381746,
+          "text": "wara pressed her lips together , really beginning to wonder why they were scuttling down a side stairway of univalle as if this were some sort of jailbreak ."
+        },
+        {
+          "sentence_id": 5102,
+          "distance": 0.29250720896243854,
+          "text": "wara bit her lip and reached up with one hand to push a stray piece of hair out of one eye ."
+        }
+      ]
+    },
+    {
+      "query_rank": 6,
+      "sentence_id": 6228,
+      "text": "for that , i offer my life now in jihad , against the injustices of the world and against the unrighteousness in my own heart .",
+      "l2": [
+        {
+          "sentence_id": 6218,
+          "distance": 0.8345531734414982,
+          "text": "`` i do this as my jihad against the cause of injustice , against those who maim and kill god 's people in palestine and around the world . ''"
+        },
+        {
+          "sentence_id": 6220,
+          "distance": 0.9177319675472745,
+          "text": "but with this my weapon , my talent that allah has given me , i fight for his cause in the world and thus win his favor for paradise . ''"
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 6218,
+          "distance": 0.34823953129820573,
+          "text": "`` i do this as my jihad against the cause of injustice , against those who maim and kill god 's people in palestine and around the world . ''"
+        },
+        {
+          "sentence_id": 6220,
+          "distance": 0.4211160212398777,
+          "text": "but with this my weapon , my talent that allah has given me , i fight for his cause in the world and thus win his favor for paradise . ''"
+        }
+      ]
+    },
+    {
+      "query_rank": 7,
+      "sentence_id": 7142,
+      "text": "trae watched in horror as the buicks dark tinted windows began to lower .",
+      "l2": [
+        {
+          "sentence_id": 7119,
+          "distance": 0.9491819846969183,
+          "text": "trae watched her for a moment , then became distracted as an older buick with faded paint slowly drifted toward the stop sign at the beginning of their street ."
+        },
+        {
+          "sentence_id": 7121,
+          "distance": 0.9502298331780213,
+          "text": "trae focused more of his attention on the car ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 7119,
+          "distance": 0.45047321234862736,
+          "text": "trae watched her for a moment , then became distracted as an older buick with faded paint slowly drifted toward the stop sign at the beginning of their street ."
+        },
+        {
+          "sentence_id": 7121,
+          "distance": 0.4514683406734934,
+          "text": "trae focused more of his attention on the car ."
+        }
+      ]
+    },
+    {
+      "query_rank": 8,
+      "sentence_id": 8754,
+      "text": "but three misses , we go home and im two hundred richer .",
+      "l2": [
+        {
+          "sentence_id": 9803,
+          "distance": 1.0365109706632123,
+          "text": "im already at two hundred grand a hit , and that will move to two-fifty on the next ones ."
+        },
+        {
+          "sentence_id": 8751,
+          "distance": 1.0496687742178412,
+          "text": "two hundred pesos says i nail it three out of five ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 9803,
+          "distance": 0.5371774464789668,
+          "text": "im already at two hundred grand a hit , and that will move to two-fifty on the next ones ."
+        },
+        {
+          "sentence_id": 8751,
+          "distance": 0.5509022324473343,
+          "text": "two hundred pesos says i nail it three out of five ."
+        }
+      ]
+    },
+    {
+      "query_rank": 9,
+      "sentence_id": 9104,
+      "text": "theyd always wear gloves , and mix it fifty parts water to one part acid .",
+      "l2": [
+        {
+          "sentence_id": 7892,
+          "distance": 0.9620459095677936,
+          "text": "he then poured off some of the boiling water into third pot and began to scrub his hands and arms with the soap , as well as the rubber gloves he had in his pocket ."
+        },
+        {
+          "sentence_id": 7922,
+          "distance": 0.9684975772266599,
+          "text": "once again , david did his best to rinse and clean the wound with the salted water solution , and then sterilize it with the distilled alcohol ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 7892,
+          "distance": 0.4627661710624924,
+          "text": "he then poured off some of the boiling water into third pot and began to scrub his hands and arms with the soap , as well as the rubber gloves he had in his pocket ."
+        },
+        {
+          "sentence_id": 7922,
+          "distance": 0.4689937925199541,
+          "text": "once again , david did his best to rinse and clean the wound with the salted water solution , and then sterilize it with the distilled alcohol ."
+        }
+      ]
+    }
+  ]
+}
