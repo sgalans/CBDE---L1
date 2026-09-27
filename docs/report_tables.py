@@ -441,7 +441,8 @@ def chroma_insert_stats_table() -> str:
         STATS_HEADER, rows, "lrrrrrr",
         f"Temps **per lot** de {DEFAULT_BATCH_SIZE} frases a Chroma; n = lots mesurats "
         f"(10 per càrrega: {c0['official']['l2']['repeats']} càrregues a L2 i 1 a cosinus a "
-        f"`C0`; 1 càrrega a `C1`; la fila *Només embedding* és una passada de la funció ONNX "
+        f"`C0`; a `C1`, 1 generació i {next(iter(c1['store'].values())).get('repeats', 1)} "
+        f"`update()` complets per col·lecció; la fila *Només embedding* és una passada de la funció ONNX "
         f"sobre els mateixos 10 lots, sense desar res). L'última fila és la de PostgreSQL, "
         f"per comparar.",
         widths=[40, 5, 11, 11, 13, 12, 8])
@@ -563,6 +564,29 @@ class CH:
     def pg_equiv(size: int) -> str:
         grid = _by_size(load("P0")["grid"])
         return num(grid[size]["total_time"]["avg"] + load("P1")["generate"]["batch_time"]["total"], 1)
+
+    @staticmethod
+    def hnsw(param: str) -> str:
+        """An HNSW parameter as used by the l2 collection (recorded by C2)."""
+        return str(load("C2")["hnsw"]["l2"][param])
+
+    @staticmethod
+    def index_speedup(metric: str = "l2") -> str:
+        """P2 brute force vs. C2 without the where filter (get + index search)."""
+        c2 = load("C2")["timing"][f"{metric}_nofilter"]["query_time"]["avg"]
+        p2 = load("P2")["timing"][metric]["query_time"]["avg"]
+        return num(p2 / c2, 0)
+
+    @staticmethod
+    def nofilter_ms(metric: str = "l2") -> str:
+        return ms(load("C2")["timing"][f"{metric}_nofilter"]["query_time"]["avg"], 2)
+
+    @staticmethod
+    def pg_call_share() -> str:
+        """Upper bound of PostgreSQL's per-call overhead (a whole INSERT + COMMIT
+        of P0) as a share of a P2 query."""
+        call = _by_size(load("P0")["grid"])[1]["batch_time"]["avg"]
+        return pct(call / load("P2")["timing"]["l2"]["query_time"]["avg"])
 
     @staticmethod
     def official_load_avg() -> str:

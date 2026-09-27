@@ -168,6 +168,10 @@ def main() -> int:
                      "repeats": args.repeats,
                      "collections": dict(CHROMA_COLLECTIONS),
                      "search": "approximate (HNSW index), get() + query() per query",
+                     # Index parameters actually in use (Chroma's defaults), so the
+                     # report can explain the recall without hand-typed values.
+                     "hnsw": {m: dict(c.configuration.get("hnsw") or {})
+                              for m, c in collections.items()},
                      "timing": {}}
     for name in VARIANTS:
         results["timing"][name] = {

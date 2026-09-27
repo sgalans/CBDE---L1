@@ -310,6 +310,24 @@ Eines:
   espectacular a mà (P0 sol) encara que contradigui el criteri declarat; una
   segona revisió independent ho va detectar.
 
+### Segona revisió externa de [CQ1]
+
+- **IA externa:** (1) el 20× amaga que el 93 % del temps de Chroma és el
+  filtre: la cerca sense filtre és ~275× més ràpida que P2, i cal descartar
+  la xarxa; (2) "els lots ajuden més a Chroma" atribueix a la BD un efecte
+  del model; (3) explicar el *recall* amb `ef_search`; (4) repetir C1.
+- **Claude Code:** (1) correcte, amb dos matisos: la variant sense filtre
+  inclou també el `get()`, i els 2,3 ms que la IA externa anomenava "viatge
+  d'anada i tornada" són una crida sencera amb `COMMIT` (serveixen com a
+  cota superior). (3) en lloc d'escriure `ef_search = 100` a mà, `C2` desa
+  la configuració HNSW real al JSON. En redactar-ho, la mateixa IA va
+  escriure dues xifres a mà ("93 %", "100 candidats") i una afirmació falsa
+  ("cerca pràcticament exhaustiva": HNSW no recorre tots els vectors); totes
+  tres es van detectar i corregir en revisar la sortida renderitzada.
+
+- **Punt (4):** l'equip decideix repetir 3 vegades l'`update()` de `C1` (~20 s
+  més) per simetria amb `P1`; la càrrega de cosinus de `C0` es manté en 1.
+
 ### 2026-09-27 — Eina per al document
 
 - **IA externa:** Quarto, Typst, Overleaf o Jupyter.

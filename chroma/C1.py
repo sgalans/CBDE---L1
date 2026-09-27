@@ -15,7 +15,10 @@ Three phases are timed separately (``results/C1.json``):
 1. **read**     - ``get(include=["documents"])`` of every record (one call).
 2. **generate** - ``model.encode`` per batch of ``DEFAULT_BATCH_SIZE`` sentences
    (comparable with P1's generation).
-3. **store**    - ``update(ids, embeddings)`` per batch, in each collection.
+3. **store**    - ``update(ids, embeddings)`` per batch, in each collection,
+   ``--repeats`` times (default 3, as P1's storing) so the stability across
+   runs can be compared. Generation is measured once: it is expensive and
+   deterministic.
 
 C1 is not part of the batch-size grid (``CLAUDE.md``): only the official batch
 size is used.
@@ -49,6 +52,7 @@ from common import (  # noqa: E402
     n_batches,
     print_stats,
     save_results,
+    stats,
 )
 
 #: Records whose C0 (ONNX) vectors are compared with ours before replacing them.
@@ -90,6 +94,8 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
                         help=f"batch size for generating and storing (default: {DEFAULT_BATCH_SIZE})")
+    parser.add_argument("--repeats", type=int, default=3,
+                        help="update() runs per collection (default: 3)")
     args = parser.parse_args()
 
     print("[C1] loading the embedding model (not timed)")
@@ -121,12 +127,19 @@ def main() -> int:
     print("\n[C1] storing: update() per collection")
     results["store"] = {}
     for space, collection in collections.items():
-        times = store(collection, ids, embeddings, args.batch_size)
+        times: list[float] = []
+        totals: list[float] = []
+        for _ in range(args.repeats):  # same vectors each time: idempotent
+            run = store(collection, ids, embeddings, args.batch_size)
+            times.extend(run)
+            totals.append(sum(run))
         results["store"][space] = {
             "collection": CHROMA_COLLECTIONS[space],
             "batch_size": args.batch_size,
+            "repeats": args.repeats,
             "batch_time": print_stats(f"update {space} batch={args.batch_size} (per batch)",
                                       times),
+            "total_time": stats(totals),
             "db_calls": {"update": n_batches(len(ids), args.batch_size)},
         }
 

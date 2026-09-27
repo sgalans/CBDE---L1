@@ -133,6 +133,8 @@ Verificat amb `chromadb` 1.5.9:
   poder comparar l'estabilitat entre càrregues a [CQ1]) i 1 a
   `sentences_cosine` (`--official-repeats`). `--skip-grid` reaprofita el grid
   i la referència d'embeddings del `results/C0.json` existent.
+- **`C1` repeteix 3 vegades l'`update()`** de cada col·lecció (`--repeats`), com
+  l'emmagatzematge de `P1`; la generació es mesura un sol cop.
 - **Variant de referència a `C2`**: `l2_nofilter` / `cosine_nofilter` demanen
   k + 1 veïns i descarten la pròpia frase a Python, per mesurar el cost del
   filtre `where` ([CQ1] c). La resposta oficial manté l'exclusió dins la BD.

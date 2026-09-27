@@ -249,8 +249,9 @@ print(chroma_batch_grid_table())
 print(chroma_insert_stats_table())
 ```
 
-D'aquí surten tres conclusions. (1) **Els lots ajuden més a Chroma que a
-PostgreSQL, si es compara el mateix treball.** A Chroma, passar de fila a
+D'aquí surten tres conclusions. (1) **Els lots ajuden més a la càrrega de
+Chroma que a la de PostgreSQL, però pel model que s'executa dins l'`add()`,
+no per la base de dades.** A Chroma, passar de fila a
 fila (`{python} CH.load_row_by_row_min()` min) a lots de 1000
 (`{python} CH.load_default()` s, al grid) redueix el temps
 `{python} CH.load_speedup()` vegades. L'equivalent a PostgreSQL (`P0` a la
@@ -274,13 +275,25 @@ HNSW; dins l'`add()`, la part que no és embedding costa
 
 **Són estables els temps de consulta? Hi ha diferències entre mètriques?** Sí
 (CV `{python} CH.query_cv("l2")` per a L2 i `{python} CH.query_cv("cosine")`
-per al cosinus). Una consulta triga uns 13 ms, **entre
-`{python} CH.query_speedup("l2")` (L2) i `{python} CH.query_speedup("cosine")`
-(cosinus) vegades menys que a PostgreSQL**. Tot i que l'índex HNSW és
-aproximat, en les 10 consultes ha recuperat **tots els veïns exactes** de `P2`
-(*recall* del `{python} CH.recall("l2")` en totes dues mètriques); és una
-mostra petita (20 veïns), però indica que a aquesta escala l'aproximació no
-té cost visible.
+per al cosinus). Una consulta triga uns `{python} ms(load("C2")["timing"]["l2"]["query_time"]["avg"], 0)` ms,
+**entre `{python} CH.query_speedup("l2")` (L2) i
+`{python} CH.query_speedup("cosine")` (cosinus) vegades menys que a
+PostgreSQL**. Però el `{python} CH.nofilter_gain()` d'aquest temps és el filtre de metadades (vegeu
+les millores): sense filtre, obtenir el vector i cercar a l'índex HNSW triga
+`{python} CH.nofilter_ms()` ms, unes **`{python} CH.index_speedup()` vegades
+menys que la força bruta de `P2`**. Aquest és el guany real d'un índex
+vectorial. La diferència no ve de la xarxa: fins i tot un `INSERT` d'una fila amb el seu `COMMIT` (mida
+de lot 1 a `P0`), que inclou l'anada i tornada, és només un
+`{python} CH.pg_call_share()` d'una consulta de `P2`.
+
+Tot i que l'índex HNSW és aproximat, en les 10 consultes ha recuperat **tots
+els veïns exactes** de `P2` (*recall* del `{python} CH.recall("l2")` en totes
+dues mètriques). És una mostra petita (20 veïns), però té una explicació:
+amb el valor per defecte `ef_search` = `{python} CH.hnsw("ef_search")`, cada
+cerca explora `{python} CH.hnsw("ef_search")` candidats per retornar-ne 2. No recorre tots els
+vectors, però aquest marge tan ampli respecte dels 2 que es demanen fa molt
+probable trobar els veïns exactes. És també el marge que es podria reduir per
+guanyar velocitat.
 
 ```{python}
 #| output: asis
