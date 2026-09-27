@@ -36,3 +36,9 @@ pgdata/
 
 # Notebooks
 .ipynb_checkpoints/
+
+# Quarto (report): build cache and intermediate files. The PDF is only
+# committed once, when the final version is delivered.
+.quarto/
+docs/informe.typ
+docs/informe.pdf

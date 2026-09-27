@@ -131,6 +131,77 @@ Eines:
   - (2), (3), (5): correctes, documentats. A (5) s'hi va afegir la idea de fer
     servir `P2` (exacte) com a referència per mesurar el *recall* de Chroma.
 
+### P0 — Càrrega del text i anomalia de xarxa
+
+- **Demanat:** escriure `P0` seguint el `CLAUDE.md` (grid de lots, idempotent,
+  resultats a JSON).
+- **IA:** una sola taula `sentences` (`INTEGER`, `SMALLINT`, `TEXT`), inserció
+  amb `execute_values` (un `INSERT` multi-fila i un `commit` per lot) per a tot
+  el grid, més `COPY` a la mida per defecte com a referència per a [PQ1](c).
+- **Validació:** a la primera execució, a partir de 500 files cada lot trigava
+  ~50 ms **independentment de la mida** (i `COPY` igual). La IA no va acceptar
+  el resultat: una latència constant indica xarxa, no base de dades. Un
+  experiment de latència per mida de missatge va mostrar una aturada de
+  ~44 ms entre ~32 i ~70 KB **només** connectant per `localhost` (que a
+  Windows es resol a `::1`); per `127.0.0.1` no hi era.
+- **Decisió:** `common.pg_config()` es connecta a `127.0.0.1`. Amb el canvi,
+  la corba és coherent (mida 1: ~20 s; 500–2000: ~0,1 s). Sense aquesta
+  verificació, el document hauria atribuït a PostgreSQL un artefacte de Docker
+  Desktop.
+- **Mida de lot per defecte:** amb el grid (3 repeticions), la IA va proposar
+  passar de 500 a 1000 (−28 % de temps; 2000 només guanya un 15 % més i deixa
+  5 lots, massa pocs per a min/max/avg/std). L'equip ho va acceptar.
+
+### P1 — Embeddings com a `REAL[]`
+
+- **Demanat:** escriure `P1` (llegir de la BD, generar, emmagatzemar).
+- **IA:** taula separada `sentence_embeddings` (INSERT en lloc d'UPDATE),
+  tres fases cronometrades per separat i validació final dins de la BD.
+- **Validació i correccions:**
+  - La validació (norma calculada en SQL) va fallar amb `underflow`: elevar al
+    quadrat un `float4` molt petit surt del rang i PostgreSQL llança error.
+    Es calcula en `float8`; la mateixa regla s'aplicarà a `P2`.
+  - L'emmagatzematge trigava ~8 s **independentment de la mida de lot** (≥ 50),
+    cosa que indicava que el coll d'ampolla no eren les crides. Un perfil per
+    passos d'un lot de 1000 va mostrar que el temps era la conversió
+    float → text: psycopg2 genera 8,25 MB de SQL (`ARRAY[...]` amb 384.000
+    literals `float8`) i el servidor l'ha d'analitzar. Enviar cada vector com
+    un literal `'{...}'` ho redueix ~3× (8,7 s → 2,8 s).
+- **Decisió:** `P1` fa servir el literal; l'adaptació per defecte es manté com
+  a referència mesurada per a [PQ1]. Round-trip verificat bit a bit.
+
+### P2 — Similitud dins de PostgreSQL
+
+- **Demanat:** escriure `P2` complint la indicació del professor (distàncies
+  calculades dins la BD).
+- **IA:** funcions `LANGUAGE sql` per a les distàncies (en `float8`, aplicant
+  la lliçó de l'underflow de P1) i una funció PL/pgSQL per al top-k que exclou
+  la pròpia frase amb `WHERE`.
+- **Validació:** el script contrasta, fora de la secció cronometrada, el
+  resultat de la BD amb una força bruta en numpy (10/10 idèntic), comprova que
+  el top-2 de les dues mètriques coincideix (10/10) i que es compleix
+  L2² = 2·d_cos (error ≤ 1e-7). Així l'equivalència de mètriques decidida
+  abans queda demostrada amb les dades reals, no només amb una mostra.
+- **Nota:** numpy s'hi fa servir només com a oracle de validació; es va
+  deixar explícit al codi per no contradir la indicació del professor.
+
+### Redacció de [PQ1] i cosinus unitari
+
+- **Correcció de l'usuari:** després d'acabar P0–P2, el document encara era
+  ple de TODOs. La IA havia ajornat la redacció "fins a tenir les xifres
+  oficials", però el disseny del document (xifres llegides dels JSON) feia
+  innecessari esperar. Es va afegir al `CLAUDE.md` la regla d'escriure les
+  observacions al document en acabar cada script.
+- **IA:** `docs/report_tables.py` genera les taules i els valors inline a
+  partir de `results/*.json`; el text de [PQ1] cita aquests valors en lloc de
+  xifres escrites a mà. A proposta de la IA i amb l'acord de l'equip, `P2`
+  mesura també `1 − a·b` (vàlid per a vectors unitaris) per demostrar amb
+  dades una millora de [PQ1](c): mateix top-2 (10/10) i ~23 % més ràpid.
+- **Validació:** el document es va renderitzar també a Markdown per revisar
+  que cada valor inline coincidís amb els JSON. En tornar a mesurar, `COPY`
+  va passar d'un 11 % (lots de 500) a un 25 % (lots de 1000) de guany; el
+  text, que deia "només", es va reescriure sense prejutjar la magnitud.
+
 ### 2026-09-27 — Eina per al document
 
 - **IA externa:** Quarto, Typst, Overleaf o Jupyter.

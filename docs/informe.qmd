@@ -21,37 +21,144 @@ execute:
 Regles d'aquest document (vegeu CLAUDE.md):
 - Màxim 10 pàgines. Precís i concís: el que puntua és el raonament sobre
   l'impedance mismatch.
-- Cap xifra escrita a mà: les taules i els números surten de results/*.json.
+- Cap xifra escrita a mà: les taules i els números surten de results/*.json
+  a través de docs/report_tables.py.
 - Les preguntes [PQ1] i [CQ1] es responen amb l'etiqueta visible.
 -->
 
+```{python}
+from report_tables import *
+```
+
 **Repositori (codi i chunk de dades):** <https://github.com/sgalans/CBDE---L1>
 
-**Dades comunes als tres sistemes.** TODO: 3–4 línies. bookCorpus (streaming),
-10.000 frases netes i sense duplicats, 500 chunks de 20 frases
-(`data/chunks.parquet`), mateix split per frases a tots els sistemes
-(`data/sentences.parquet`). Model `all-MiniLM-L6-v2` (384 dim., vectors
-normalitzats). Les 10 frases de consulta són a `data/queries.json` (taula a
-l'annex o aquí mateix). Mètriques: L2 i cosinus.
+**Dades i metodologia.** De bookCorpus (HuggingFace, en *streaming*) s'han
+extret 10.000 frases netes i sense duplicats, agrupades en 500 chunks de 20
+frases consecutives (`data/chunks.parquet`). Els tres sistemes carreguen
+exactament el mateix split per frases (`data/sentences.parquet`:
+`sentence_id`, `chunk_id`, `pos`, `text`). Els embeddings es generen amb
+`all-MiniLM-L6-v2` (384 dimensions), que retorna vectors de **norma 1**. Les
+mètriques són **L2** i **cosinus**, i el top-2 exclou sempre la pròpia frase.
+Els temps es mesuren amb `time.perf_counter` en un únic portàtil (Intel Core
+i7-13700H, 16 GB, PostgreSQL 16 a Docker Desktop).
+
+```{python}
+#| output: asis
+print(queries_table())
+```
 
 # PostgreSQL
 
 ## Decisions de disseny
 
-TODO: tipus de dades (`REAL[]`), esquema, inserció per lots (mètode i mida),
-lectura del text des de la BD a `P1`, funcions PL/pgSQL de distància.
-Per a cada decisió: impacte en rendiment, línies de codi i crides.
+**Tipus i esquema.** El text va a `sentences(sentence_id INTEGER PK,
+chunk_id INTEGER, pos SMALLINT, text TEXT)`: `chunk_id` i `pos` conserven el
+chunk d'origen, i `TEXT` té el mateix emmagatzematge que `VARCHAR(n)` sense
+comprovar longituds. Els embeddings van a una taula a part,
+`sentence_embeddings(sentence_id PK/FK, embedding REAL[])`: `REAL` (float4) és
+la precisió que produeix el model (`float8[]` doblaria la mida sense guany), i
+una taula separada fa que desar-los sigui un `INSERT` pur; un `UPDATE` sobre
+`sentences` escriuria una versió nova de cada fila i en deixaria una de morta.
+Aquí apareix el primer *mismatch*: `REAL[]` és un array genèric. PostgreSQL no
+sap que és un vector de 384 dimensions, no en controla la mida i no té
+operadors de distància ni índexs per a ell.
+
+**Inserció per lots.** Cada lot és un únic `INSERT` multi-fila
+(`execute_values`) i un `COMMIT`, de manera que les crides a la BD són
+exactament el nombre de lots. S'ha provat un grid de mides (1 a 2000; la mida
+1 és el *baseline* fila a fila) i s'ha triat **1000**: 2000 guanya poc més i
+deixaria només 5 lots per calcular les estadístiques.
+
+**El viatge dels vectors.** `P1` llegeix el text de la BD (1 `SELECT`,
+`{python} PG.read_time_ms()` ms), genera els embeddings a Python i els torna a
+escriure. Com que PostgreSQL no té cap tipus que rebi un array numpy, **cada
+float viatja com a text i el servidor l'ha de tornar a analitzar**.
+L'adaptació per defecte de psycopg2 genera `ARRAY[...]` amb un literal `float8`
+per component (≈8 MB de SQL per lot de 1000 vectors); enviar cada vector com un
+sol literal `'{...}'::real[]` és `{python} PG.adapt_factor()` vegades més ràpid,
+i és el que fa `P1`. Amb `repr` el valor retornat és bit a bit idèntic al
+generat (verificat).
+
+**Distàncies dins la BD.** Com que no hi ha operadors vectorials, les dues
+mètriques s'han hagut d'escriure com a funcions SQL sobre `unnest(a, b)`, i el
+top-k com una funció PL/pgSQL (`top_k_similar`) que llegeix el vector de la
+consulta, exclou la pròpia frase amb `WHERE` i fa `ORDER BY distància LIMIT k`.
+Python envia un identificador i rep dues files: els vectors no surten mai de la
+BD. Els càlculs es fan en `float8`, perquè elevar al quadrat un `float4` molt
+petit fa que PostgreSQL llanci un error d'*underflow* en lloc d'arrodonir a 0.
+La cerca és **exacta** (força bruta sobre les 10.000 files).
+
+```{python}
+#| output: asis
+print(pg_cost_table())
+```
 
 ## [PQ1]
 
-**Estabilitat dels temps d'inserció (text i embeddings).**
-TODO (taula de `P0`/`P1` per mida de lot).
+**Són estables els temps d'inserció de text i embeddings?** Amb lots, sí: a la
+mida triada el coeficient de variació per lot és baix (taula següent). El menys
+estable és el fila a fila (CV del temps total `{python} PG.text_row_by_row_cv()`
+entre càrregues), perquè 10.000 crides acumulen tot el soroll del sistema.
 
-**Estabilitat dels temps de consulta i diferències entre mètriques.**
-TODO (taula de `P2`; equivalència L2–cosinus amb vectors normalitzats).
+```{python}
+#| output: asis
+print(pg_batch_grid_table())
+print(pg_insert_stats_table())
+```
 
-**Millores possibles a PostgreSQL (sense pgvector).**
-TODO.
+Les conclusions són dues. (1) **Per al text, el cost és per crida, no per
+fila**: cada crida costa ≈`{python} PG.text_cost_per_call_ms()` ms (anada i
+tornada + `COMMIT`), i agrupar-les redueix el temps de
+`{python} PG.text_row_by_row()` s a `{python} PG.text_default()` s
+(`{python} PG.text_speedup()`×). (2) **Per als embeddings, a partir de ~500
+files la mida de lot deixa d'importar**: el coll d'ampolla ja no són les crides
+sinó convertir 384 floats per vector a text i tornar-los a analitzar. Desar-los
+costa `{python} PG.emb_vs_text()` vegades més que desar el text de les mateixes
+files: és el preu de l'*impedance mismatch*. La generació
+(`{python} PG.generate_total()` s en total) és el cost més gran, però és
+idèntica per a qualsevol sistema.
+
+**Són estables els temps de consulta? Hi ha diferències entre mètriques?** Sí,
+són estables (CV `{python} PG.query_cv("l2")` per a L2 i
+`{python} PG.query_cv("cosine")` per al cosinus): cada consulta fa exactament
+la mateixa feina, recórrer les 10.000 files i operar 384 components per fila,
+sigui quina sigui la frase.
+
+```{python}
+#| output: asis
+print(pg_query_table())
+```
+
+Les dues mètriques donen **el mateix top-2 en `{python} PG.same_topk()`
+consultes**. No és casualitat: amb vectors de norma 1,
+$\lVert a-b \rVert^2 = 2 - 2\cos(a,b)$, és a dir, la distància L2 és una funció
+creixent de la distància cosinus i ordenen igual. A les dades,
+$|L2^2 - 2\,d_{cos}| \le$ `{python} PG.identity_error()`. L'única diferència
+és el temps: el cosinus és un `{python} PG.cosine_overhead()` més lent perquè
+calcula tres sumes (producte escalar i dues normes) en lloc d'una.
+
+**Quines tècniques de PostgreSQL (sense pgvector) millorarien el rendiment?**
+
+- *Inserció.* `COPY` en lloc d'`INSERT` (mesurat: un
+  `{python} PG.copy_gain()` menys de temps amb lots de 1000; el guany és
+  limitat perquè el nombre de crides és el mateix); `COPY` **binari** per als
+  embeddings, que evitaria
+  justament la conversió float→text; taules `UNLOGGED` o
+  `synchronous_commit = off` durant la càrrega; crear la clau primària i la
+  forana després de carregar; i un sol `COMMIT` final.
+- *Estructura de dades.* Guardar vectors normalitzats (o la norma
+  precalculada) permet reduir el cosinus a $1 - a \cdot b$: ho hem mesurat i
+  és un `{python} PG.unit_gain()` més ràpid amb el mateix resultat. Un `bytea`
+  amb els 1.536 bytes crus ocuparia menys i evitaria el text, però la BD no el
+  podria llegir sense una funció en C.
+- *Consulta.* Funcions en C en lloc de SQL interpretat amb `unnest`;
+  paral·lelisme (`PARALLEL SAFE` + `max_parallel_workers_per_gather`); i
+  resoldre les 10 consultes en una sola crida (`CROSS JOIN LATERAL`). Com a
+  índex, l'extensió `cube` amb GiST permet cercar el veí més proper per
+  distància euclidiana, però està limitada a 100 dimensions (caldria reduir-ne
+  la dimensionalitat, perdent precisió). Cap índex estàndard (B-tree, GIN,
+  GiST sobre arrays) accelera la distància a un vector arbitrari: aquesta és la
+  mancança que resol pgvector.
 
 # Chroma
 

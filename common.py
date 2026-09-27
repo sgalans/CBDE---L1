@@ -61,7 +61,9 @@ METRICS = ("l2", "cosine")
 #: Batch sizes explored when measuring insertion performance.
 BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)
 #: Batch size used for the "official" runs once the grid has been explored.
-DEFAULT_BATCH_SIZE = 500
+#: Chosen from P0's grid: 28 % faster than 500, while 2000 only saves another
+#: 15 % and would leave just 5 batches to compute min/max/avg/std over.
+DEFAULT_BATCH_SIZE = 1000
 
 # --------------------------------------------------------------------------
 # PostgreSQL connection
@@ -76,7 +78,11 @@ PGVECTOR_DATABASE = "cbde_pgvector"
 def pg_config(dbname: str = PG_DATABASE) -> dict[str, Any]:
     """Connection parameters for psycopg2, overridable through the environment."""
     return {
-        "host": os.getenv("PGHOST", "localhost"),
+        # 127.0.0.1, not "localhost": on Windows "localhost" resolves to ::1
+        # first, and Docker Desktop's IPv6 port forwarding stalls ~45 ms on
+        # every message of roughly 32-70 KB (a 500-row INSERT), which would
+        # be measured as if it were PostgreSQL's cost.
+        "host": os.getenv("PGHOST", "127.0.0.1"),
         "port": int(os.getenv("PGPORT", "5432")),
         "dbname": os.getenv("PGDATABASE", dbname),
         "user": os.getenv("PGUSER", "cbde"),

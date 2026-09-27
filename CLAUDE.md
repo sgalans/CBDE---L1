@@ -34,8 +34,8 @@ De cada sèrie de temps: **mínim, màxim, mitjana i desviació estàndard**.
 | Model d'embeddings | `all-MiniLM-L6-v2` (sentence-transformers), **384 dimensions** |
 | Mètriques de distància | **Euclidiana (L2)** i **Cosinus** — a tots tres sistemes. **Sense L1** (vegeu nota) |
 | PostgreSQL | via **Docker** (`docker-compose.yml` a l'arrel), no instal·lació local. Imatge **`pgvector/pgvector:pg16`** per a tot (vegeu nota) |
-| Connexió a Postgres | `common.pg_config()`: per defecte `localhost:5432`, usuari/contrasenya `cbde`, iguals que el `docker-compose.yml` i a totes les màquines. Sense `.env`; només es poden sobreescriure amb les variables `PG*` |
-| Mides de lot | Grid **únic** per a `P0`/`P1`, `C0` i `G0`/`G1`: `common.BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)`; la mida 1 és el baseline fila a fila. Càrrega "oficial" amb `common.DEFAULT_BATCH_SIZE = 500` (es revisarà amb els resultats de `P0`). Cap script defineix el seu propi grid |
+| Connexió a Postgres | `common.pg_config()`: per defecte **`127.0.0.1:5432`** (no `localhost`: a Windows es resol a IPv6 i Docker Desktop hi afegeix ~45 ms per missatge de 32–70 KB, verificat), usuari/contrasenya `cbde`, iguals que el `docker-compose.yml` i a totes les màquines. Sense `.env`; només es poden sobreescriure amb les variables `PG*` |
+| Mides de lot | Grid **únic** per a `P0`/`P1`, `C0` i `G0`/`G1`: `common.BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)`; la mida 1 és el baseline fila a fila. Càrrega "oficial" amb **`common.DEFAULT_BATCH_SIZE = 1000`**, triada amb el grid de `P0`: un 28 % més ràpida que 500; 2000 només guanya un 15 % més i deixaria només 5 lots per a les estadístiques. Cap script defineix el seu propi grid |
 | Base de dades pgvector | `cbde_pgvector`, creada per `docker/init/01-create-pgvector-db.sql` en la primera arrencada del volum (o a mà, vegeu README). `G0` ha de fallar amb un missatge clar si no existeix |
 | Top-2 | **Sempre s'exclou la pròpia frase** de la consulta (`sentence_id` de `queries.json`) a `P2`, `C2` i `G2`: "els 2 més semblants entre *totes les altres* frases" |
 | Entorn Python | `.venv` creat a cada màquina (mai committejat), Python 3.13 |
@@ -90,10 +90,28 @@ No canviar a la imatge oficial `postgres`: no porta l'extensió.
   **llegeix de la BD** (no del Parquet), es generen els embeddings i es tornen
   a escriure. Aquest viatge d'anada i tornada BD ↔ Python és part de
   l'impedance mismatch i s'ha de mesurar.
+- `P1` (implementat): taula separada
+  `sentence_embeddings(sentence_id PK/FK, embedding REAL[])`, no `UPDATE`
+  sobre `sentences` (l'UPDATE reescriu la fila i deixa tuples mortes). Tres
+  temps separats: lectura, generació, emmagatzematge.
+- **El cost d'emmagatzemar vectors és serialitzar floats a text** (verificat
+  amb perfil): l'adaptació per defecte de psycopg2 (`ARRAY[...]`, cada float
+  un literal `float8`; 8,25 MB de SQL per 1000 vectors) és ~3× més lenta que
+  enviar cada vector com un sol literal `'{...}'::real[]`. `P1` fa servir el
+  literal i mesura l'adaptació per defecte com a referència. `repr` garanteix
+  que el valor tornat és bit-idèntic (error de round-trip 0, validat).
+- **Aritmètica en `float8`**: elevar al quadrat components `REAL` molt petits
+  dona `value out of range: underflow` (PostgreSQL no arrodoneix a 0). Les
+  funcions de distància de `P2` han de fer els càlculs amb `float8`.
 
 - `P2`: el top-2 s'ha de filtrar amb `WHERE sentence_id <> <id de la consulta>`
   **dins de la funció SQL/PL/pgSQL**, no a Python després. Si no, la pròpia
   frase surt sempre primera amb distància 0.
+- `P2` (implementat): `l2_distance` i `cosine_distance` en `LANGUAGE sql`
+  sobre `unnest(a, b)` en `float8`; `top_k_similar(q_id, metric, k)` en
+  PL/pgSQL (una branca per mètrica, no `CASE` per fila). 1 crida per consulta
+  i mètrica. numpy **només** valida el resultat (top-2 idèntic 10/10), no el
+  calcula. Resultat verificat: top-2 L2 = cosinus 10/10, |L2² − 2·d_cos| ≤ 1e-7.
 
 ### Chroma: decisions de disseny (C0/C1/C2)
 
@@ -197,8 +215,16 @@ utilitats**, no reimplementar-les.
 ## Entregables finals
 
 1 document (màx. 10 pàgines, **en català**) + 6 scripts (9 amb la part
-opcional). Font: `docs/informe.qmd` → PDF amb Quarto (`format: typst`); les
+opcional). **En acabar cada script, afegir-ne les observacions i decisions a
+la secció corresponent de `docs/informe.qmd`** (bloc "Notes d'esborrany"), no
+només explicar-les al xat: el context de la conversa es resumeix i es perd.
+Font: `docs/informe.qmd` → PDF amb Quarto (`format: typst`); les
 taules i xifres es generen des de `results/*.json`, mai escrites a mà.
+Les taules i els valors inline (`{python} PG.xxx()`) surten de
+`docs/report_tables.py`; per a cada sistema nou, s'hi afegeixen funcions
+equivalents. Generar el PDF (amb el `.venv`, que té jupyter):
+`$env:QUARTO_PYTHON = ".venv\Scripts\python.exe"; quarto render docs/informe.qmd`
+(o `quarto preview` amb el `.venv` activat).
 
 **Avaluació** (enunciat): PostgreSQL 3p, Chroma 3p, Discussió 3p (4p amb
 pgvector), pgvector 2p. El que més pesa és **el raonament i la discussió sobre

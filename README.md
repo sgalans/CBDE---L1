@@ -80,9 +80,12 @@ docker exec cbde_postgres psql -U cbde -d cbde -c "CREATE DATABASE cbde_pgvector
 ```
 
 Connection parameters are the same
-on every machine (`localhost:5432`, user/password `cbde`) and live in
+on every machine (`127.0.0.1:5432`, user/password `cbde`) and live in
 `common.pg_config()`; they can be overridden with the standard `PG*`
-environment variables. For a SQL console:
+environment variables. The host is deliberately `127.0.0.1` and not
+`localhost`: on Windows `localhost` resolves to IPv6 first, and Docker
+Desktop's IPv6 forwarding adds ~45 ms to every 32-70 KB message, which would
+distort the batch-insertion timings. For a SQL console:
 
 ```bash
 docker exec -it cbde_postgres psql -U cbde -d cbde
