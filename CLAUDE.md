@@ -28,11 +28,30 @@ De cada sèrie de temps: **mínim, màxim, mitjana i desviació estàndard**.
 | Corpus | `bookCorpus` de HuggingFace, en mode **streaming**, ~10.000 frases |
 | Chunking | blocs de **20 frases** per chunk (~500 chunks) |
 | Model d'embeddings | `all-MiniLM-L6-v2` (sentence-transformers), **384 dimensions** |
-| Mètriques de distància | **Euclidiana (L2)** i **Cosinus** — a tots tres sistemes |
+| Mètriques de distància | **Euclidiana (L2)** i **Cosinus** — a tots tres sistemes. **Sense L1** (vegeu nota) |
 | PostgreSQL | via **Docker** (`docker-compose.yml` a l'arrel), no instal·lació local |
 | Entorn Python | `.venv` creat a cada màquina (mai committejat), Python 3.13 |
 | Format de dades | **Parquet** a `data/` |
 | Repo | https://github.com/sgalans/CBDE---L1 |
+
+### Nota: L2 i cosinus donen el mateix rànquing (i és intencionat)
+
+`all-MiniLM-L6-v2` acaba amb una capa `Normalize`: tots els embeddings tenen
+norma 1. Per a vectors unitaris, ‖a−b‖² = 2 − 2·cos(a,b), així que **els top-2
+per L2 i per cosinus seran idèntics** a tots tres sistemes (verificat
+empíricament a la mostra del corpus). No és un error de disseny:
+
+- Es manté L2 + cosinus perquè **Chroma només suporta `l2`, `ip` i `cosine`**, i
+  amb vectors normalitzats les tres són equivalents. Canviar a L1 obligaria a
+  trencar "mateixes mètriques a tots els sistemes". Tampoc s'afegeix L1 com a
+  tercera mètrica (decisió de l'equip: complica sense aportar prou).
+- Els **temps** sí que poden diferir entre mètriques (el cosinus fa més
+  operacions), i això és el que es compara.
+- Els scripts de similitud (`P2`, `C2`, `G2`) han de **comprovar** que els top-2
+  coincideixen i que les distàncies compleixen la relació, perquè el document
+  ho pugui afirmar amb dades.
+- El document ho ha d'**explicar explícitament** a [PQ1]/[CQ1]; si no, sembla
+  que les mètriques s'han triat sense entendre'n la geometria.
 
 ## Màquines de treball
 
