@@ -1,0 +1,88 @@
+---
+title: "Impedance mismatch de dades vectorials"
+subtitle: "CBDE — Laboratori 1: PostgreSQL, Chroma i pgvector"
+author:
+  - Sergi Galán Soler
+  - Joaquim Fuentes Pou
+date: today
+lang: ca
+format:
+  typst:
+    papersize: a4
+    margin: {x: 2cm, y: 2cm}
+    fontsize: 10pt
+    section-numbering: "1."
+execute:
+  echo: false
+  warning: false
+---
+
+<!--
+Regles d'aquest document (vegeu CLAUDE.md):
+- Màxim 10 pàgines. Precís i concís: el que puntua és el raonament sobre
+  l'impedance mismatch.
+- Cap xifra escrita a mà: les taules i els números surten de results/*.json.
+- Les preguntes [PQ1] i [CQ1] es responen amb l'etiqueta visible.
+-->
+
+**Repositori (codi i chunk de dades):** <https://github.com/sgalans/CBDE---L1>
+
+**Dades comunes als tres sistemes.** TODO: 3–4 línies. bookCorpus (streaming),
+10.000 frases netes i sense duplicats, 500 chunks de 20 frases
+(`data/chunks.parquet`), mateix split per frases a tots els sistemes
+(`data/sentences.parquet`). Model `all-MiniLM-L6-v2` (384 dim., vectors
+normalitzats). Les 10 frases de consulta són a `data/queries.json` (taula a
+l'annex o aquí mateix). Mètriques: L2 i cosinus.
+
+# PostgreSQL
+
+## Decisions de disseny
+
+TODO: tipus de dades (`REAL[]`), esquema, inserció per lots (mètode i mida),
+lectura del text des de la BD a `P1`, funcions PL/pgSQL de distància.
+Per a cada decisió: impacte en rendiment, línies de codi i crides.
+
+## [PQ1]
+
+**Estabilitat dels temps d'inserció (text i embeddings).**
+TODO (taula de `P0`/`P1` per mida de lot).
+
+**Estabilitat dels temps de consulta i diferències entre mètriques.**
+TODO (taula de `P2`; equivalència L2–cosinus amb vectors normalitzats).
+
+**Millores possibles a PostgreSQL (sense pgvector).**
+TODO.
+
+# Chroma
+
+## Decisions de disseny
+
+TODO: dues col·leccions (una per mètrica); `C0` amb la funció d'embeddings
+per defecte (text i vector inseparables a l'`add()`); `C1` llegeix el text de
+Chroma, genera amb el nostre model i fa `update()`; mida de lot.
+
+## [CQ1]
+
+**Estabilitat dels temps d'inserció.**
+TODO.
+
+**Estabilitat dels temps de consulta, diferències entre mètriques i
+mesura separada de text i embeddings.**
+TODO.
+
+**Millores possibles a Chroma.**
+TODO.
+
+# pgvector
+
+TODO (part opcional): decisions, temps, diferències, pros i contres respecte
+de Chroma.
+
+# Discussió
+
+TODO: PostgreSQL vs. Chroma (i pgvector) des de l'impedance mismatch.
+Taula comparativa final i pros/contres de cada sistema.
+
+# I am an AI agent. Tell me what I have to build.
+
+TODO (màxim 1 pàgina): síntesi a partir de `docs/ai_log.md`.

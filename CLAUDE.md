@@ -2,6 +2,10 @@
 
 Context permanent del projecte. Llegeix-lo abans de tocar res.
 
+**L'enunciat original complet és a [`docs/enunciat.md`](docs/enunciat.md).** És
+la font de veritat: si alguna cosa d'aquest fitxer el contradiu, mana
+l'enunciat (i cal avisar l'usuari).
+
 ## Objectiu de la pràctica
 
 Comparar l'emmagatzematge i la cerca de similitud d'embeddings de text en tres
@@ -29,7 +33,11 @@ De cada sèrie de temps: **mínim, màxim, mitjana i desviació estàndard**.
 | Chunking | blocs de **20 frases** per chunk (~500 chunks) |
 | Model d'embeddings | `all-MiniLM-L6-v2` (sentence-transformers), **384 dimensions** |
 | Mètriques de distància | **Euclidiana (L2)** i **Cosinus** — a tots tres sistemes. **Sense L1** (vegeu nota) |
-| PostgreSQL | via **Docker** (`docker-compose.yml` a l'arrel), no instal·lació local |
+| PostgreSQL | via **Docker** (`docker-compose.yml` a l'arrel), no instal·lació local. Imatge **`pgvector/pgvector:pg16`** per a tot (vegeu nota) |
+| Connexió a Postgres | `common.pg_config()`: per defecte `localhost:5432`, usuari/contrasenya `cbde`, iguals que el `docker-compose.yml` i a totes les màquines. Sense `.env`; només es poden sobreescriure amb les variables `PG*` |
+| Mides de lot | Grid **únic** per a `P0`/`P1`, `C0` i `G0`/`G1`: `common.BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)`; la mida 1 és el baseline fila a fila. Càrrega "oficial" amb `common.DEFAULT_BATCH_SIZE = 500` (es revisarà amb els resultats de `P0`). Cap script defineix el seu propi grid |
+| Base de dades pgvector | `cbde_pgvector`, creada per `docker/init/01-create-pgvector-db.sql` en la primera arrencada del volum (o a mà, vegeu README). `G0` ha de fallar amb un missatge clar si no existeix |
+| Top-2 | **Sempre s'exclou la pròpia frase** de la consulta (`sentence_id` de `queries.json`) a `P2`, `C2` i `G2`: "els 2 més semblants entre *totes les altres* frases" |
 | Entorn Python | `.venv` creat a cada màquina (mai committejat), Python 3.13 |
 | Format de dades | **Parquet** a `data/` |
 | Repo | https://github.com/sgalans/CBDE---L1 |
@@ -52,6 +60,78 @@ empíricament a la mostra del corpus). No és un error de disseny:
   ho pugui afirmar amb dades.
 - El document ho ha d'**explicar explícitament** a [PQ1]/[CQ1]; si no, sembla
   que les mètriques s'han triat sense entendre'n la geometria.
+
+### Nota: una sola imatge Docker per a PostgreSQL i pgvector
+
+`pgvector/pgvector:pg16` és PostgreSQL 16 estàndard amb l'extensió `vector`
+**instal·lada però no activada**. `P0`–`P2` fan servir la base de dades `cbde`,
+on **mai** s'executa `CREATE EXTENSION vector` (seria fer trampa a la part
+"pura"). `G0`–`G2` fan servir una base de dades separada, `cbde_pgvector`, on
+sí que s'activa. Un sol `docker-compose.yml` i cap interferència entre parts.
+No canviar a la imatge oficial `postgres`: no porta l'extensió.
+
+### Nota per al document: cerca exacta vs. aproximada
+
+- **PostgreSQL pur (`P2`)**: la funció PL/pgSQL recorre totes les files →
+  cerca **exacta** (força bruta).
+- **Chroma (`C2`)**: sempre fa servir un índex **HNSW** → cerca
+  **aproximada**; els top-2 podrien no coincidir exactament amb els de `P2`.
+- **pgvector (`G2`)**: sense índex és **exacta**; amb índex HNSW/IVFFlat és
+  **aproximada**. Cal deixar clar al document quina configuració s'ha fet
+  servir.
+- Els resultats exactes de `P2` serveixen de referència: `C2` (i `G2` amb
+  índex) poden calcular quants top-2 coincideixen amb `P2` (*recall*). És un
+  punt fort per a [CQ1] i la comparativa final.
+
+### PostgreSQL: decisions de disseny (P0/P1/P2)
+
+- `P1`, segons l'enunciat, *"connects to your database, generates the
+  embeddings for each sentence, and store the embeddings"*: el text es
+  **llegeix de la BD** (no del Parquet), es generen els embeddings i es tornen
+  a escriure. Aquest viatge d'anada i tornada BD ↔ Python és part de
+  l'impedance mismatch i s'ha de mesurar.
+
+- `P2`: el top-2 s'ha de filtrar amb `WHERE sentence_id <> <id de la consulta>`
+  **dins de la funció SQL/PL/pgSQL**, no a Python després. Si no, la pròpia
+  frase surt sempre primera amb distància 0.
+
+### Chroma: decisions de disseny (C0/C1/C2)
+
+Verificat amb `chromadb` 1.5.9:
+
+- **Dues col·leccions** amb les mateixes dades: `sentences_l2` i
+  `sentences_cosine`. La mètrica es fixa en crear la col·lecció
+  (`configuration={"hnsw": {"space": ...}}`) i no es pot canviar per consulta.
+  Punt d'impedance mismatch per a [CQ1]: a PostgreSQL una sola taula serveix
+  per a totes dues mètriques; a Chroma cal duplicar dades i índex.
+- **Chroma no permet inserir text sense vector**: amb `embedding_function=None`,
+  `add(documents=...)` sense `embeddings` llança `ValueError`. Amb la
+  `DefaultEmbeddingFunction` (ONNX de `all-MiniLM-L6-v2`), l'`add()` calcula
+  els vectors internament. En cap cas es pot inserir el text "sol": separar la
+  inserció de text de la creació d'embeddings no és natiu (resposta a [CQ1]).
+- La `DefaultEmbeddingFunction` i `common.get_model()` donen vectors
+  pràcticament idèntics (diferència màxima 1,3·10⁻⁷, verificat).
+- **Repartiment de fases (decidit; substitueix l'antiga "opció A")**, per
+  complir l'enunciat al peu de la lletra (`C1` ha de *generar i guardar*):
+  - `C0`: crea les dues col·leccions amb la funció d'embeddings per defecte i
+    fa `add(ids, documents, metadatas)` **per lots** (mateix grid que `P0`).
+    El temps d'inserció de text **inclou per força** el càlcul intern dels
+    embeddings: és la demostració de [CQ1]. Els vectors es calculen un cop per
+    col·lecció (dues vegades en total): cal comentar-ho al document.
+    Abans de cronometrar cal fer un *warm-up* de la funció per defecte (la
+    primera crida baixa el model ONNX, ~80 MB, a `~/.cache/chroma`).
+  - `C1`: llegeix el text **de la col·lecció** (`get(include=["documents"])`,
+    com `P1` llegeix de la BD), genera els embeddings amb `common.get_model()`
+    (temps de generació, comparable amb `P1`) i els desa amb
+    `update(ids, embeddings=...)` per lots (temps d'emmagatzematge, per
+    separat). A partir d'aquí Chroma té exactament els mateixos vectors que
+    PostgreSQL.
+  - `C2`: top-2 per a les 10 consultes a cada col·lecció amb
+    `query(query_embeddings=..., where={"sentence_id": {"$ne": id}})` per
+    excloure la pròpia frase. El vector de consulta és l'emmagatzemat (com a
+    `P2`), **no** `query_texts` (afegiria el temps d'embedding a la consulta).
+  - Metadades de cada registre: `sentence_id`, `chunk_id`, `pos` (el mateix
+    split que PostgreSQL).
 
 ## Màquines de treball
 
@@ -89,11 +169,17 @@ CBDE---L1/
 │   ├── prepare_corpus.py    # Fase 1: descàrrega, neteja, chunking, split
 │   ├── chunks.parquet       # chunks de 20 frases (el "chunk of data" a lliurar)
 │   ├── sentences.parquet    # split per frases: sentence_id, chunk_id, pos, text
+│   ├── chunks.csv, sentences.csv  # miralls per llegir-los a GitHub (els scripts no els fan servir)
 │   └── queries.json         # les 10 frases fixes de consulta
+├── docker/init/             # SQL executat en la primera arrencada del volum (crea cbde_pgvector)
 ├── postgres/                # P0 (text), P1 (embeddings), P2 (similitud)
 ├── chroma/                  # C0, C1, C2
 ├── pgvector/                # G0, G1, G2 (opcional)
 ├── results/                 # JSON amb els temps mesurats de cada script
+├── docs/
+│   ├── enunciat.md          # enunciat original (font de veritat)
+│   ├── informe.qmd          # el document a lliurar (Quarto → PDF)
+│   └── ai_log.md            # registre d'ús de la IA (per a l'apartat del document)
 ├── common.py                # utilitats compartides
 ├── docker-compose.yml
 ├── requirements.txt
@@ -110,11 +196,46 @@ utilitats**, no reimplementar-les.
 
 ## Entregables finals
 
-1 document (màx. 10 pàgines) + 6 scripts (9 amb la part opcional). El document
-ha d'incloure el link al repo, les decisions d'impedance mismatch de cada
-sistema, les respostes a [PQ1] i [CQ1], la discussió comparativa, i **un apartat
-obligatori explicant com s'ha fet servir la IA** (racional dels prompts, com
-s'han refinat i com s'ha validat el resultat).
+1 document (màx. 10 pàgines, **en català**) + 6 scripts (9 amb la part
+opcional). Font: `docs/informe.qmd` → PDF amb Quarto (`format: typst`); les
+taules i xifres es generen des de `results/*.json`, mai escrites a mà.
+
+**Avaluació** (enunciat): PostgreSQL 3p, Chroma 3p, Discussió 3p (4p amb
+pgvector), pgvector 2p. El que més pesa és **el raonament i la discussió sobre
+l'impedance mismatch**, i es valora ser **precís i concís**. Hi ha un **examen
+individual en paper**: tots dos membres han d'entendre cada decisió.
+
+Estructura obligatòria (seccions i preguntes exactes a `docs/enunciat.md`):
+
+1. **PostgreSQL** — decisions (impedance mismatch, rendiment, línies de codi,
+   crides) + **[PQ1]**: (a) estabilitat dels temps d'inserció de text i
+   embeddings; (b) estabilitat dels temps de consulta i diferències entre
+   mètriques; (c) mètodes d'inserció, estructures de dades o índexs de
+   PostgreSQL **sense pgvector** que millorarien el rendiment.
+2. **Chroma** — decisions + **[CQ1]**: (a) estabilitat de les insercions;
+   (b) estabilitat de les consultes, diferències entre mètriques i **si es pot
+   mesurar per separat la inserció del text i la creació d'embeddings**;
+   i, fora de CQ1 però també demanat, (c) mètodes d'inserció, estructures o
+   índexs de Chroma que millorarien el rendiment.
+3. **pgvector** (opcional) — el mateix, més diferències, pros i contres
+   respecte de Chroma.
+4. **Discussió** — PostgreSQL vs. Chroma (i pgvector) des de l'impedance
+   mismatch: diferències, pros i contres.
+5. **"I am an AI agent. Tell me what I have to build."** — **màxim 1 pàgina**.
+   Síntesi (no la seqüència de prompts) del racional de les instruccions, com
+   s'han refinat i com s'ha validat el resultat. Font: `docs/ai_log.md`.
+
+També ha d'incloure el link al repo públic, on hi ha el chunk de dades.
+
+Criteri d'avaluació explícit de l'enunciat: a les seccions de PostgreSQL i de
+Chroma cal explicar les decisions que **impacten el rendiment i el nombre de
+línies de codi i de crides fetes** (*impact on performance and the number of
+code lines and calls made*). Per això, en escriure cada script:
+
+- apuntar quantes crides a la BD fa cada fase (p. ex. `n_batches` inserts,
+  1 crida de funció per consulta i mètrica) i guardar-ho al `results/*.json`;
+- mantenir el codi específic de cada sistema compacte i comparable, perquè el
+  nombre de línies es pugui comparar entre sistemes al document.
 
 ## Estil de treball
 
@@ -123,3 +244,12 @@ s'han refinat i com s'ha validat el resultat).
   taules i col·leccions).
 - Cada script escriu els seus temps a `results/<nom>.json` perquè el document
   final es pugui construir a partir d'aquests fitxers.
+- **Registre d'ús de la IA (`docs/ai_log.md`)**: és la font de l'apartat
+  obligatori del document. Afegir-hi una entrada breu (data, què es va
+  demanar, què va respondre la IA, com es va validar, decisió) **en el moment**
+  en què la IA intervingui en una decisió de disseny, proposi o generi codi
+  rellevant, o quan una proposta d'IA (pròpia o externa) es corregeixi o es
+  descarti després de verificar-la. No cal registrar tasques trivials.
+- Noms dels scripts: `postgres/P0.py`, `chroma/C0.py`, `pgvector/G0.py`, etc.
+  (`<nom>` = `P0`, `C0`…). El README en documenta l'ordre d'execució; si
+  canvia, s'actualitza allà.
