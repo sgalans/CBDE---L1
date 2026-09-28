@@ -193,6 +193,42 @@ Verificat amb `chromadb` 1.5.9:
   - Metadades de cada registre: `sentence_id`, `chunk_id`, `pos` (el mateix
     split que PostgreSQL).
 
+### pgvector: decisions de disseny (G0/G1/G2)
+
+- **`G0` reutilitza el codi de `P0`** (`from postgres import P0`): mateixa
+  taula, mateixos tipus, mateix `INSERT` per lots. Només canvia la BD
+  (`cbde_pgvector`, amb `CREATE EXTENSION vector` a `common.pgvector_connect()`).
+  Que el text no necessiti codi nou és un argument per a la Discussió:
+  pgvector **estén** el model relacional, no el substitueix. No es repeteix
+  la referència `COPY` (mesuraria el mateix que a `P0`).
+- **`G1`**: llegeix el text amb `P1.read_sentences` (mateix SQL), genera amb
+  `common.generate_embeddings` i desa `vector(384)` amb l'adaptador oficial
+  `pgvector.psycopg2` (`register_vector`). L'adaptador envia cada vector com
+  **un sol literal de text** `'[x1,...]'`, igual que el literal `'{...}'::real[]`
+  de `P1`: són directament comparables. Mateix grid que `P1` (3 repeticions).
+- **Índexs HNSW a `G1`, construïts DESPRÉS de carregar** (pràctica recomanada
+  per pgvector), un per mètrica (`vector_l2_ops`, `vector_cosine_ops`): com a
+  Chroma, un índex serveix una sola distància, però **les dades es desen una
+  sola vegada**. Chroma, en canvi, manté l'índex durant cada `add()`: cal
+  dir-ho en comparar temps d'inserció. Es mesura el temps de construcció (3
+  repeticions) i la mida de taula i índexs.
+- **`G2`**: una sola crida SQL per consulta (patró documentat de pgvector,
+  `ORDER BY embedding <-> (SELECT ...) LIMIT k` amb `WHERE sentence_id <> q`),
+  el vector no surt de la BD, com a `P2`. Dues configuracions sobre la mateixa
+  taula: **exacta** (`SET enable_indexscan = off`, força bruta amb la distància
+  en C) i **hnsw** (aproximada). `EXPLAIN` comprova que l'índex s'usa només a
+  `hnsw`; la configuració exacta **ha de** coincidir al 100 % amb `P2` o el
+  script falla. `<->` retorna la L2 **sense** elevar al quadrat (a diferència
+  de Chroma): la identitat es comprova com L2² = 2·d_cos.
+- `common.exact_reference()` i `common.recall_at_k()` són compartides per `C2`
+  i `G2` (abans `C2` tenia la seva còpia).
+- **Resultats verificats de pgvector** (per no reinterpretar-los): text igual
+  que `P0`; desar `vector(384)` ~13 % més ràpid que `REAL[]`; cerca exacta
+  ~90× més ràpida que `P2` (mateix algorisme, distància en C); HNSW ~250×
+  `P2` i ~13× Chroma amb filtre, *recall* 100 % (`ef_search` = 40); cada índex
+  HNSW ocupa més que la taula. Per llegir `hnsw.ef_search` cal haver carregat
+  la llibreria a la sessió (`SELECT NULL::vector`).
+
 ## Màquines de treball
 
 Cada membre de l'equip desenvolupa des del seu portàtil. El repo no conté cap
@@ -253,7 +289,9 @@ Càrrega de dades (`load_sentences`, `load_chunks`, `load_queries`), cronòmetre
 (`batched`), persistència de resultats (`save_results`), paràmetres de connexió
 a Postgres, client i col·leccions de Chroma (`chroma_client`, `chroma_collections`, `CHROMA_COLLECTIONS`), constants
 del model i la generació d'embeddings per lots amb temps i *warm-up*
-(`generate_embeddings`, compartida per `P1`, `C1` i `G1`). **Tot script nou ha de fer servir aquestes
+(`generate_embeddings`, compartida per `P1`, `C1` i `G1`), la connexió a pgvector
+(`pgvector_connect`) i la referència exacta i el *recall* dels top-k
+(`exact_reference`, `recall_at_k`, compartides per `C2` i `G2`). **Tot script nou ha de fer servir aquestes
 utilitats**, no reimplementar-les.
 
 ## Entregables finals

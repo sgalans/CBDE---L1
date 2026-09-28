@@ -42,3 +42,6 @@ pgdata/
 .quarto/
 docs/informe.typ
 docs/informe.pdf
+# Quarto previews of other Markdown files (e.g. an accidental README preview)
+*.html
+*_files/

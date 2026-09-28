@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from common import DEFAULT_BATCH_SIZE, RESULTS_DIR, load_queries  # noqa: E402
+from common import DEFAULT_BATCH_SIZE, METRICS, RESULTS_DIR, load_queries  # noqa: E402
 
 METRIC_NAMES = {"l2": "L2", "cosine": "Cosinus", "cosine_unit": "Cosinus unitari (1 − a·b)",
                 "l2_nofilter": "L2, sense filtre (k + 1)",
@@ -208,6 +208,11 @@ SYSTEM_CODE = {
     "chroma/C0.py": ["default_embedding_function", "recreate_collection", "load"],
     "chroma/C1.py": ["read_documents", "store"],
     "chroma/C2.py": ["top_k"],
+    # G0 has no system code of its own: it reuses P0's table and loading code.
+    "pgvector/G0.py": [],
+    "pgvector/G1.py": ["DDL", "INSERT_SQL", "INDEXES", "recreate_table", "store",
+                       "build_indexes"],
+    "pgvector/G2.py": ["OPERATORS", "TOP_K_SQL", "CONFIGS", "top_k"],
 }
 
 
@@ -673,3 +678,194 @@ class CH:
     @staticmethod
     def identity_error() -> str:
         return sci(load("C2")["validation"]["max_abs_error_l2sq_vs_2cos"])
+
+
+# --------------------------------------------------------------------------
+# pgvector
+# --------------------------------------------------------------------------
+
+
+def mb(n_bytes: int) -> str:
+    return num(n_bytes / 1e6, 1)
+
+
+def pgv_batch_grid_table() -> str:
+    """Total load times of G0 (text) and G1 (vector) per batch size, next to P1."""
+    g0, g1 = _by_size(load("G0")["grid"]), _by_size(load("G1")["grid"])
+    p1 = _by_size(load("P1")["grid"])
+    rows = []
+    for size in sorted(g0):
+        rows.append([
+            f"**{size}**" if size == DEFAULT_BATCH_SIZE else str(size),
+            num(g0[size]["total_time"]["avg"]), num(g0[size]["total_time"]["std"]),
+            num(g1[size]["total_time"]["avg"]), num(g1[size]["total_time"]["std"]),
+            num(p1[size]["total_time"]["avg"]) if size in p1 else "–",
+        ])
+    reps = load("G0")["grid"][0]["repeats"]
+    return table(
+        ["Mida de lot", "Text (G0): total (s)", "desv. entre càrregues",
+         "`vector` (G1): total (s)", "desv. entre càrregues", "*Ref.: `REAL[]` (P1)*"],
+        rows, "rrrrrr",
+        f"pgvector: temps **total** de càrrega de les 10.000 frases per mida de lot "
+        f"(mitjana i desviació entre {reps} càrregues). L'última columna és `P1`, per "
+        f"comparar. En negreta, la mida triada.",
+        widths=[12, 17, 16, 17, 16, 17])
+
+
+def pgv_stats_table() -> str:
+    g0, g1 = load("G0"), load("G1")
+    rows = [
+        _stats_row("Emmagatzematge del text (G0)",
+                   _by_size(g0["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]),
+        _stats_row("Generació d'embeddings (G1)", g1["generate"]["batch_time"]),
+        _stats_row("Emmagatzematge de `vector(384)` (G1)",
+                   _by_size(g1["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]),
+    ]
+    rows += [_stats_row(f"Construcció de l'índex HNSW, {METRIC_NAMES[m]} (G1)",
+                        g1["index"][m]["build_time"]) for m in METRICS]
+    reps = _by_size(g0["grid"])[DEFAULT_BATCH_SIZE]["repeats"]
+    return table(
+        STATS_HEADER, rows, "lrrrrrr",
+        f"pgvector: temps **per lot** de {DEFAULT_BATCH_SIZE} frases (10 lots × {reps} "
+        f"càrregues; generació, 10 lots) i per **construcció completa** de cada índex "
+        f"({reps} construccions).",
+        widths=[40, 5, 11, 11, 13, 12, 8])
+
+
+def pgv_query_table() -> str:
+    g2, p2 = load("G2"), load("P2")
+    names = {"exact": "Exacta (sense índex)", "hnsw": "HNSW"}
+    rows = []
+    for config, r in g2["configs"].items():
+        recall = r["validation"].get("recall_vs_P2", {})
+        for m in METRICS:
+            s = r["timing"][m]["query_time"]
+            rows.append([f"{names[config]}, {METRIC_NAMES[m]}", str(s["n"]), ms(s["min"], 2),
+                         ms(s["max"], 2), ms(s["avg"], 2), ms(s["std"], 2), pct(cv(s)),
+                         num(p2["timing"][m]["query_time"]["avg"] / s["avg"], 0),
+                         pct(recall[m]) if m in recall else "–"])
+    return table(
+        ["Configuració", "n", "mín (ms)", "màx (ms)", "mitjana (ms)", "desv. (ms)", "CV",
+         "× P2", "Recall vs P2"],
+        rows, "lrrrrrrrr",
+        f"`G2`: temps **per consulta** del top-{g2['k']} (una sola crida SQL); n = 10 "
+        f"consultes × {g2['repeats']} rondes. *× P2*: vegades més ràpid que la força bruta "
+        f"en SQL de `P2`.",
+        widths=[28, 5, 10, 10, 12, 10, 7, 7, 11])
+
+
+class GV:
+    """Named values used inline in the pgvector section."""
+
+    @staticmethod
+    def _grid(name: str, size: int = DEFAULT_BATCH_SIZE) -> dict:
+        return _by_size(load(name)["grid"])[size]
+
+    @classmethod
+    def text_vs_p0(cls) -> str:
+        """Relative difference of the text load, G0 vs. P0, at the chosen size."""
+        g, p = cls._grid("G0")["total_time"]["avg"], cls._grid("P0")["total_time"]["avg"]
+        return pct(abs(g / p - 1))
+
+    @classmethod
+    def store_total(cls) -> str:
+        return num(cls._grid("G1")["total_time"]["avg"], 2)
+
+    @classmethod
+    def store_gain_vs_p1(cls) -> str:
+        g, p = cls._grid("G1")["total_time"]["avg"], cls._grid("P1")["total_time"]["avg"]
+        return pct(1 - g / p)
+
+    @staticmethod
+    def index_build(metric: str = "l2") -> str:
+        return num(load("G1")["index"][metric]["build_time"]["avg"], 2)
+
+    @staticmethod
+    def index_mb(metric: str = "l2") -> str:
+        return mb(load("G1")["index"][metric]["index_bytes"])
+
+    @staticmethod
+    def table_mb() -> str:
+        return mb(load("G1")["index"]["table_bytes"])
+
+    @staticmethod
+    def query_ms(config: str, metric: str = "l2") -> str:
+        return ms(load("G2")["configs"][config]["timing"][metric]["query_time"]["avg"], 1)
+
+    @staticmethod
+    def query_cv(config: str, metric: str = "l2") -> str:
+        return pct(cv(load("G2")["configs"][config]["timing"][metric]["query_time"]))
+
+    @staticmethod
+    def speedup_vs_p2(config: str, metric: str = "l2") -> str:
+        g = load("G2")["configs"][config]["timing"][metric]["query_time"]["avg"]
+        return num(load("P2")["timing"][metric]["query_time"]["avg"] / g, 0)
+
+    @staticmethod
+    def vs_chroma(metric: str = "l2") -> str:
+        """How many times faster G2 with HNSW is than C2 (both with the exclusion)."""
+        g = load("G2")["configs"]["hnsw"]["timing"][metric]["query_time"]["avg"]
+        return num(load("C2")["timing"][metric]["query_time"]["avg"] / g, 0)
+
+    @staticmethod
+    def ef_search() -> str:
+        return str(load("G2")["hnsw_ef_search"])
+
+    @staticmethod
+    def recall(config: str, metric: str = "l2") -> str:
+        return pct(load("G2")["configs"][config]["validation"]["recall_vs_P2"][metric])
+
+    @staticmethod
+    def same_topk() -> str:
+        v = load("G2")["configs"]["exact"]["validation"]
+        return f"{v['same_top_k_l2_vs_cosine']}/10"
+
+    @staticmethod
+    def identity_error() -> str:
+        return sci(load("G2")["configs"]["exact"]["validation"]["max_abs_error_l2sq_vs_2cos"])
+
+    @staticmethod
+    def lines(script: str) -> str:
+        return str(system_lines(script))
+
+
+def pgv_cost_table() -> str:
+    """Code lines and calls of each pgvector script, as Tables for P and C."""
+    g0, g1 = load("G0"), load("G1")
+    text_calls = g0["official"]["db_calls"]["statements"]
+    emb_calls = g1["official"]["db_calls"]["statements"]
+    rows = [
+        ["G0 (text)", "0 (codi de `P0`)", str(code_lines("pgvector/G0.py")),
+         f"{text_calls} `INSERT` + {text_calls} `COMMIT`"],
+        ["G1 (embeddings)", str(system_lines("pgvector/G1.py")), str(code_lines("pgvector/G1.py")),
+         f"1 `SELECT` + {emb_calls} `INSERT` + {emb_calls} `COMMIT` + 2 `CREATE INDEX`"],
+        ["G2 (similitud)", str(system_lines("pgvector/G2.py")), str(code_lines("pgvector/G2.py")),
+         "1 consulta SQL per consulta i mètrica"],
+    ]
+    return table(["Script", "Línies (sistema)", "Línies (total)", "Crides a la BD (càrrega oficial)"],
+                 rows, "lrrl",
+                 "Cost en codi i crides de pgvector, amb el mateix criteri de línies que a "
+                 "PostgreSQL i Chroma.",
+                 widths=[20, 16, 12, 52])
+
+
+def generation_spread() -> str:
+    """Range of the per-batch embedding generation time across P1, C1 and G1:
+    same model, same machine, different runs."""
+    avgs = [load(n)["generate"]["batch_time"]["avg"] for n in ("P1", "C1", "G1")]
+    return f"{ms(min(avgs), 0)} i {ms(max(avgs), 0)} ms"
+
+
+class GV2:
+    """Extra inline values for the pgvector section."""
+
+    @staticmethod
+    def row_by_row(name: str) -> str:
+        return num(_by_size(load(name)["grid"])[1]["total_time"]["avg"], 1)
+
+    @staticmethod
+    def same_code_spread() -> str:
+        """Row-by-row text load of G0 vs. P0: identical code, different runs."""
+        g = _by_size(load("G0")["grid"])[1]["total_time"]["avg"]
+        p = _by_size(load("P0")["grid"])[1]["total_time"]["avg"]
+        return pct(abs(g / p - 1))

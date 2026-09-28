@@ -328,6 +328,66 @@ Eines:
 - **Punt (4):** l'equip decideix repetir 3 vegades l'`update()` de `C1` (~20 s
   més) per simetria amb `P1`; la càrrega de cosinus de `C0` es manté en 1.
 
+### 2026-09-28 — pgvector (G0–G2): disseny i revisió de coherència
+
+- **Demanat:** fer la part opcional de pgvector.
+- **IA — disseny:** `G0` reutilitza el codi de `P0` (el text no canvia amb
+  pgvector); `G1` desa `vector(384)` amb l'adaptador oficial i construeix un
+  índex HNSW per mètrica després de carregar; `G2` mesura la cerca exacta i
+  l'aproximada sobre la mateixa taula, una crida SQL per consulta. Abans
+  d'escriure `G1` es va llegir el codi de l'adaptador `pgvector.psycopg2`
+  per saber què envia: un literal de text per vector, com `P1`, cosa que fa
+  la comparació directa.
+- **Correcció de l'usuari:** va demanar revisar que tot seguís el
+  `CLAUDE.md` i l'enunciat. La IA havia (1) oblidat aquesta entrada de
+  registre, (2) no havia documentat pgvector al `CLAUDE.md`, (3) havia
+  duplicat codi (`load_exact_reference`/recall de `C2`, `read_sentences` de
+  `P1`), (4) no havia afegit G0–G2 al criteri de línies i (5) desava les
+  respostes de `G2` en un format diferent de `P2`/`C2`. Tot es va corregir:
+  funcions compartides a `common.py` (referència exacta i *recall*),
+  reutilització de `P1.read_sentences` (no a `common.py`, perquè el criteri
+  de línies exclou `common.py` i hauria esbiaixat P1 respecte de C1), i
+  format de respostes unificat.
+- **Validacions afegides:** `EXPLAIN` per garantir que la configuració
+  "hnsw" usa l'índex i l'"exacta" no; la configuració exacta ha de
+  coincidir al 100 % amb `P2` o el script falla.
+
+### 2026-09-28 — pgvector: execució i secció de l'informe
+
+- **Error en executar:** `G2` va fallar amb `SHOW hnsw.ef_search` perquè els
+  paràmetres de pgvector no existeixen a la sessió fins que es carrega la
+  llibreria (primer ús del tipus `vector`). Es força la càrrega amb
+  `SELECT NULL::vector` abans de llegir-lo.
+- **Validació:** totes les comprovacions van passar: `EXPLAIN` (índex només a
+  la configuració HNSW), configuració exacta = `P2` al 100 %, *recall* HNSW
+  100 % amb `ef_search` = 40, vectors recuperats bit a bit iguals.
+- **Resultat clau:** la cerca exacta de pgvector (mateixa força bruta que
+  P2, distància en C) és ~90× més ràpida que P2: el cost de P2 era
+  l'impedance mismatch, no l'algorisme. Els dos índexs HNSW ocupen més que
+  la taula.
+- **Redacció:** secció amb les mateixes preguntes que [PQ1]/[CQ1] i la de
+  l'enunciat sobre les diferències amb Chroma; totes les xifres surten de
+  `report_tables.py` (`GV.*`).
+
+### 2026-09-28 — Revisió externa de la secció de pgvector
+
+- **IA externa:** va recalcular les xifres (correctes) i va assenyalar:
+  (1) falta la taula de línies i crides de pgvector ("the same
+  information"); (2) a mida 1, `vector` surt +56 % més lent que `REAL[]`
+  sense cap comentari; (3) la generació varia un 17 % entre scripts;
+  (4) `G0` vs. `P0` és un 4 %, no un 5 %.
+- **Claude Code:** (1) correcte, afegida. (4) **incorrecte**: la IA externa
+  va calcular amb valors arrodonits de la taula; amb els del JSON surt 4,7 %
+  → 5 %. (3) correcte, reconegut a la metodologia com a soroll entre
+  execucions. (2) no es va acceptar "deu ser soroll" sense provar-ho: un
+  experiment intercalant 2.000 insercions d'una fila a `REAL[]` i a
+  `vector(384)` (mateixes condicions per a tots dos) va donar 2,15 vs.
+  2,11 ms per fila i el mateix cost de preparació al client. La diferència
+  de la taula és soroll de l'execució (durant `G1` l'usuari va llançar una
+  previsualització del document); el text ho explica sense xifres fetes a
+  mà, recolzant-se en la diferència entre `G0` i `P0`, que executen codi
+  idèntic.
+
 ### 2026-09-27 — Eina per al document
 
 - **IA externa:** Quarto, Typst, Overleaf o Jupyter.

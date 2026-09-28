@@ -108,8 +108,8 @@ collections) and writes its timings to `results/<script>.json`.
 | 5 | `python chroma/C1.py` | embedding generation |
 | 6 | `python chroma/C2.py` | top-2 search in the `l2` and `cosine` collections |
 | 7 | `python pgvector/G0.py` | *(optional)* text insertion |
-| 8 | `python pgvector/G1.py` | *(optional)* embeddings as `vector(384)` |
-| 9 | `python pgvector/G2.py` | *(optional)* top-2 with `<->` and `<=>` |
+| 8 | `python pgvector/G1.py` | *(optional)* embeddings as `vector(384)` + HNSW indexes |
+| 9 | `python pgvector/G2.py` | *(optional)* top-2 with `<->` and `<=>`, exact and HNSW |
 
 Within each system the order matters (P1 needs P0's table, P2 needs P1's
 embeddings); the three systems are independent of each other.

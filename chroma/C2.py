@@ -39,7 +39,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -48,13 +47,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common import (  # noqa: E402
     CHROMA_COLLECTIONS,
     METRICS,
-    RESULTS_DIR,
     TOP_K,
     Timer,
     chroma_client,
     chroma_collections,
+    exact_reference,
     load_queries,
     print_stats,
+    recall_at_k,
     save_results,
     stats,
 )
@@ -100,17 +100,6 @@ def run_queries(collections: dict, queries: list[dict], repeats: int, k: int):
     return answers, times
 
 
-def load_exact_reference() -> dict | None:
-    """P2's exact top-k per metric, or None if P2 has not been run."""
-    path = RESULTS_DIR / "P2.json"
-    if not path.exists():
-        return None
-    with path.open(encoding="utf-8") as fh:
-        p2 = json.load(fh)
-    return {m: {a["sentence_id"]: [n["sentence_id"] for n in a[m]] for a in p2["answers"]}
-            for m in METRICS}
-
-
 def validate(answers: dict, queries: list[dict], k: int) -> dict:
     same_ranking = 0
     max_identity_error = 0.0  # | l2_squared - 2 * cosine_distance |
@@ -133,14 +122,10 @@ def validate(answers: dict, queries: list[dict], k: int) -> dict:
             sid not in [n for n, _ in answers[v][sid]] for v in VARIANTS for sid in answers[v]),
     }
 
-    reference = load_exact_reference()
+    reference = exact_reference()
     if reference is not None:
         # Recall@k: share of P2's exact neighbours that HNSW also returned.
-        checks["recall_vs_P2"] = {
-            m: sum(len(set(reference[m][q["sentence_id"]]) & {n for n, _ in answers[m][q["sentence_id"]]})
-                   for q in queries) / (k * len(queries))
-            for m in METRICS
-        }
+        checks["recall_vs_P2"] = recall_at_k(reference, answers, queries, k)
     if not checks["excludes_query_itself"]:
         raise RuntimeError(f"a query sentence was returned as its own neighbour: {checks}")
     return checks

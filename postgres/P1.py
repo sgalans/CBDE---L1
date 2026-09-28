@@ -102,13 +102,17 @@ CONVERTERS = {
 # --------------------------------------------------------------------------
 
 
-def read_sentences(conn) -> tuple[list[int], list[str], float]:
-    """Phase 1: fetch every sentence from PostgreSQL (one query)."""
+def read_sentences(conn, loader: str = "postgres/P0.py") -> tuple[list[int], list[str], float]:
+    """Phase 1: fetch every sentence from PostgreSQL (one query).
+
+    Also used by G1 (pgvector): reading the text is plain SQL in both.
+    ``loader`` names the script that fills the table, for the error message.
+    """
     with Timer() as t, conn.cursor() as cur:
         cur.execute("SELECT sentence_id, text FROM sentences ORDER BY sentence_id")
         rows = cur.fetchall()
     if not rows:
-        raise RuntimeError("Table 'sentences' is empty. Run postgres/P0.py first.")
+        raise RuntimeError(f"Table 'sentences' is empty. Run {loader} first.")
     ids = [r[0] for r in rows]
     texts = [r[1] for r in rows]
     return ids, texts, t.elapsed

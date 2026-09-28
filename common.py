@@ -90,6 +90,30 @@ def pg_config(dbname: str = PG_DATABASE) -> dict[str, Any]:
     }
 
 
+def pgvector_connect():
+    """Connection to the pgvector database, with the extension enabled.
+
+    The extension lives only in ``cbde_pgvector``: the plain-PostgreSQL part
+    (database ``cbde``) never enables it. Fails with a clear message if the
+    database was not created (see README).
+    """
+    import psycopg2
+
+    try:
+        conn = psycopg2.connect(**pg_config(PGVECTOR_DATABASE))
+    except psycopg2.OperationalError as exc:
+        if "does not exist" in str(exc):
+            raise RuntimeError(
+                f"database '{PGVECTOR_DATABASE}' does not exist. Create it once with:\n"
+                f'  docker exec cbde_postgres psql -U cbde -d cbde -c '
+                f'"CREATE DATABASE {PGVECTOR_DATABASE} OWNER cbde"') from exc
+        raise
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
+    return conn
+
+
 # --------------------------------------------------------------------------
 # Chroma
 # --------------------------------------------------------------------------
@@ -157,6 +181,29 @@ def _require(path: Path) -> None:
         raise FileNotFoundError(
             f"{path} not found. Run `python data/prepare_corpus.py` first."
         )
+
+
+def exact_reference() -> dict[str, dict[int, list[int]]] | None:
+    """P2's exact top-k neighbour ids per metric and query, or None if P2 has
+    not been run. It is the reference for the recall of C2 and G2."""
+    path = RESULTS_DIR / "P2.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as fh:
+        p2 = json.load(fh)
+    return {m: {a["sentence_id"]: [n["sentence_id"] for n in a[m]] for a in p2["answers"]}
+            for m in METRICS}
+
+
+def recall_at_k(reference: dict, answers: dict, queries: list[dict], k: int) -> dict[str, float]:
+    """Share of the exact neighbours (``reference``) also returned in
+    ``answers`` ({metric: {sentence_id: [(neighbour_id, distance), ...]}})."""
+    return {
+        m: sum(len(set(reference[m][q["sentence_id"]])
+                   & {n for n, _ in answers[m][q["sentence_id"]]}) for q in queries)
+           / (k * len(queries))
+        for m in METRICS
+    }
 
 
 # --------------------------------------------------------------------------
