@@ -14,6 +14,38 @@ Eines:
   del professor) que Claude Code llegeix a cada sessió, per no haver de
   repetir-lo a cada prompt i evitar propostes que contradiguin l'enunciat.
 
+## Guia per redactar l'apartat "I am an AI agent…" (pendent, es farà al final)
+
+Recollida d'una revisió externa (2026-09-28), per no perdre-la:
+
+- **Extensió:** màxim 1 pàgina per enunciat, però **objectiu ~¾ de pàgina**:
+  la Discussió ja acaba a la pàgina 9 i el document no pot passar de 10.
+- **Tres eixos que demana l'enunciat** (sintetitzar, no reproduir prompts):
+  1. *Raonament de les instruccions:* el `CLAUDE.md` com a context
+     persistent (decisions fixades, indicacions del professor, criteris de
+     mesura) per no repetir-lo a cada sessió; l'enunciat literal a
+     `docs/enunciat.md` com a font de veritat.
+  2. *Com es van refinar:* decisions que van canviar en veure les dades o
+     en contrastar-les amb l'enunciat: equivalència L2/cosinus documentada
+     en lloc de canviar de mètrica; C0 amb la funció d'embeddings per
+     defecte (després de detectar que l'opció A no complia "generate and
+     store"); filtre de metadades mesurat contra k + 1; `localhost` vs.
+     `127.0.0.1`; justificació de la mida de lot pel comportament del
+     sistema.
+  3. *Com es va validar:* comprovacions independents de la IA (vectors
+     recuperats bit a bit, `EXPLAIN` dels plans, *recall* contra P2,
+     identitat L2/cosinus a les dades, taula del top-2 que falla si els
+     sistemes no coincideixen) i revisió creuada dels números amb un altre
+     xat, **corregint també aquest xat quan s'equivocava** (p. ex. el 4 %
+     que en realitat era 4,7 %; el "CLAUDE.md contradiu el TODO" basat en
+     una versió antiga). És exactament el que valora l'enunciat: usar la IA
+     amb criteri propi i no acceptar-ne el resultat sense comprovar-lo.
+- **Advertència (revisió de Gemini, 2026-09-28):** va suggerir escriure que
+  es va donar un *rol* a la IA ("enginyer expert"), que es va treballar per
+  "fases estrictes" i que es va validar amb `EXPLAIN ANALYZE`. **No va ser
+  així** (cap prompt de rol; es va fer servir `EXPLAIN`, no `ANALYZE`). A
+  l'apartat només s'hi posa el que consta en aquest registre.
+
 ---
 
 ### Esquelet del repo i fase 1 (commit `08c8f10`)
@@ -387,6 +419,92 @@ Eines:
   previsualització del document); el text ho explica sense xifres fetes a
   mà, recolzant-se en la diferència entre `G0` i `P0`, que executen codi
   idèntic.
+
+### 2026-09-28 — Discussió
+
+- **Demanat:** escriure la Discussió seguint la proposta de la revisió
+  externa (taula comparativa dels tres sistemes i gradació del mismatch, sense
+  repetir la comparació pgvector–Chroma), fusionant-hi les taules de línies i
+  crides, i afegir una taula amb el top-2 de cada consulta.
+- **IA:** la taula del top-2 **comprova en generar-se** que els veïns són
+  idèntics a P2, C2 i G2 i per a les dues mètriques; si no ho fossin, el
+  document falla en lloc d'afirmar-ho. Les seccions conserven una frase amb
+  les línies i crides clau, perquè l'enunciat ho demana a cada secció.
+- **Autorevisió:** dues afirmacions del primer esborrany anaven més enllà de
+  les dades ("dos ordres de magnitud més lentes", cert només respecte de
+  pgvector amb HNSW; "creixen linealment", no mesurat) i es van reformular.
+
+### 2026-09-28 — Revisió completa contra l'avaluació de l'enunciat
+
+- **Demanat:** revisar l'informe sencer contra l'enunciat (especialment
+  l'avaluació) i buscar dades o informació contradictòries.
+- **Resultat:** cap xifra contradictòria (totes surten dels mateixos JSON).
+  Es van corregir cinc problemes de redacció: dues referències a "la taula
+  següent" que apuntaven a una altra taula; la pregunta d'estabilitat de les
+  consultes de pgvector, plantejada però no resposta (i amb un CV alt a
+  HNSW que calia explicar); un temps de construcció d'índex atribuït a tots
+  dos índexs; una frase repetida (concisió, que l'enunciat avalua); i
+  "Chroma elimina el desajust", massa fort davant de les pròpies dades (2
+  crides per consulta).
+
+### 2026-09-28 — "Fins a N vegades": el màxim que cap de les dues IA va trobar
+
+- **Seqüència:** Claude Code va substituir "dos ordres de magnitud" per
+  "fins a 242 vegades" (el factor de pgvector HNSW L2). La IA externa va
+  notar que 242 no era el màxim i va proposar "fins a 290".
+- **Validació:** en lloc de triar un número a mà, el rang es calcula sobre
+  tots els índexs mesurats (pgvector HNSW i Chroma sense filtre, totes dues
+  mètriques): surt **entre 242 i 367**. El màxim real (Chroma sense filtre,
+  cosinus) no l'havia trobat cap de les dues IA. Lliçó: les xifres que
+  resumeixen diverses taules s'han de calcular, no llegir-les a ull.
+
+### 2026-09-28 — Revisió de Gemini
+
+- **Acceptat, verificant-ho abans:** explicar d'on surt el màxim del rang
+  (Chroma sense filtre); omplir el *recall* de les files sense filtre (els
+  veïns són idèntics als filtrats, comprovat per C2); unitats explícites a la
+  taula comparativa; explicar el `WHERE` amb HNSW **després de mirar el pla
+  real amb `EXPLAIN`** (filtre sobre la sortida de l'índex).
+- **Matisat:** atribuir la lentitud de l'ONNX a "l'embolcall o la
+  configuració" era especulatiu; només s'afirma el que les dades suporten
+  (mateix model, vectors iguals fins a 1e-7 → la diferència és de l'entorn
+  d'execució).
+- **Rebutjat:** els suggeriments per a l'apartat d'IA que no corresponen al
+  que es va fer (rol, `EXPLAIN ANALYZE`).
+
+### 2026-09-28 — Última ronda de revisions (Claude i Gemini)
+
+- **Claude (xat):** tensió entre "els vectors ONNX coincideixen" i
+  "C1 els substitueix perquè siguin els mateixos". Resolta indicant la
+  tolerància (diferència màxima llegida de `C1.json`; es mostrarà la xifra
+  quan `C0 → C1` s'executin seguits a les mesures oficials).
+- **Gemini:** afirmava que el PDF mostrava `sentence_id > q` en lloc de `<>`.
+  **Fals:** es van renderitzar les pàgines a PNG amb el compilador Typst i
+  la pàgina mostra `<>` correctament; l'error era de l'extracció de text de
+  l'eina que va llegir el PDF (el mateix passa amb els guions de partició).
+  Lliçó: verificar sobre el format lliurat, i no acceptar una crítica sense
+  reproduir-la.
+
+### 2026-09-28 — Revisió de ChatGPT (rigor de les afirmacions)
+
+- **Verificat abans de respondre:** la norma 1 és correcta (el model acaba
+  amb `Normalize`; normes desades 1 ± 1,3e-7), i el repo és públic.
+- **Troballa pròpia en fer-ho:** el link de l'informe porta a `main`, que no
+  conté les dades ni els scripts (tot és a `develop`). Afegit a la llista de
+  lliurament del `CLAUDE.md`.
+- **Acceptat (8 canvis de redacció):** atribuir només una part del cost
+  d'emmagatzemar vectors al mismatch (l'altra és inherent: 384 valors);
+  treure "determinista" (la composició del lot canvia els valors ~1e-7);
+  "cost de P2 no era l'algorisme" → quantificat (el 99 % del temps de P2);
+  "el guany real" → "aïlla millor"; mateixos top-2 "en les 10 consultes",
+  no garantia; "Chroma gairebé elimina" → "redueix fortament"; filtre "car"
+  → quantificat; "pgvector és la millor opció" → conclusió descriptiva, dient
+  què no s'ha avaluat; redacció dels vectors ONNX/PyTorch que semblava
+  contradictòria.
+- **No acceptat:** repetir a la Discussió limitacions ja explicades a les
+  seccions (client integrat, C0 amb embeddings) i reestructurar les millores
+  en "mesurat / no mesurat" (ja s'indica "mesurat" a cada una, i l'espai és
+  just).
 
 ### 2026-09-27 — Eina per al document
 

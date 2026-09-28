@@ -38,7 +38,8 @@ extret 10.000 frases netes i sense duplicats, agrupades en 500 chunks de 20
 frases consecutives (`data/chunks.parquet`). Els tres sistemes carreguen
 exactament el mateix split per frases (`data/sentences.parquet`:
 `sentence_id`, `chunk_id`, `pos`, `text`). Els embeddings es generen amb
-`all-MiniLM-L6-v2` (384 dimensions), que retorna vectors de **norma 1**. Les
+`all-MiniLM-L6-v2` (384 dimensions), l'última capa del qual (`Normalize`)
+retorna vectors de **norma 1** (verificat sobre els vectors desats). Les
 mètriques són **L2** i **cosinus**, i el top-2 exclou sempre la pròpia frase.
 Els temps es mesuren amb `time.perf_counter` en un únic portàtil (Intel Core
 i7-13700H, 16 GB, PostgreSQL 16 a Docker Desktop). La unitat de mesura és
@@ -46,7 +47,7 @@ l'operació: **un lot** en les insercions i **una consulta** en la cerca. Les
 estadístiques (mínim, màxim, mitjana, desviació) es calculen sobre totes les
 operacions mesurades, i n = lots (o consultes) × repeticions; cada taula indica
 quantes repeticions s'han fet. La generació d'embeddings es mesura un sol cop
-per script, perquè és cara i determinista; tot i així, el mateix model a la
+per script, perquè és cara; tot i així, el mateix model a la
 mateixa màquina ha donat entre `{python} generation_spread()` per lot segons
 l'execució, cosa que indica el soroll entre execucions i obliga a llegir amb
 cautela les diferències petites entre sistemes. Abans de cronometrar es fa un *warm-up*
@@ -68,9 +69,8 @@ el chunk d'on ve (`chunk_id`) i la seva posició (`pos`), de manera que els
 chunks es poden reconstruir des de la BD.
 
 **Tipus i esquema.** El text va a `sentences(sentence_id INTEGER PK,
-chunk_id INTEGER, pos SMALLINT, text TEXT)`: `chunk_id` i `pos` conserven el
-chunk d'origen, i `TEXT` té el mateix emmagatzematge que `VARCHAR(n)` sense
-comprovar longituds. Els embeddings van a una taula a part,
+chunk_id INTEGER, pos SMALLINT, text TEXT)`: `TEXT` té el mateix
+emmagatzematge que `VARCHAR(n)` sense comprovar longituds. Els embeddings van a una taula a part,
 `sentence_embeddings(sentence_id PK/FK, embedding REAL[])`: `REAL` (float4) és
 la precisió que produeix el model (`float8[]` doblaria la mida sense guany), i
 una taula separada fa que desar-los sigui un `INSERT` pur; un `UPDATE` sobre
@@ -108,15 +108,17 @@ BD. Els càlculs es fan en `float8`, perquè elevar al quadrat un `float4` molt
 petit fa que PostgreSQL llanci un error d'*underflow* en lloc d'arrodonir a 0.
 La cerca és **exacta** (força bruta sobre les 10.000 files).
 
-```{python}
-#| output: asis
-print(pg_cost_table())
-```
+**Línies i crides.** El codi que parla amb la BD ocupa `{python} str(system_lines("postgres/P0.py"))` línies a `P0`,
+`{python} str(system_lines("postgres/P1.py"))` a `P1` i `{python} str(system_lines("postgres/P2.py"))` a `P2`, la majoria SQL de les
+funcions de distància que el sistema no ofereix. La càrrega fa un `INSERT` i un `COMMIT`
+per lot, i la cerca fa una crida per consulta i mètrica (la
+comparació entre sistemes és a la Discussió).
 
 ## [PQ1]
 
 **Són estables els temps d'inserció de text i embeddings?** Amb lots, sí: a la
-mida triada el coeficient de variació per lot és baix (taula següent). El menys
+mida triada el coeficient de variació per lot és baix (taules
+següents). El menys
 estable és el fila a fila (CV del temps total `{python} PG.text_row_by_row_cv()`
 entre càrregues), perquè 10.000 crides acumulen tot el soroll del sistema.
 
@@ -134,7 +136,10 @@ tornada + `COMMIT`), i agrupar-les redueix el temps de
 files la mida de lot deixa d'importar**: el coll d'ampolla ja no són les crides
 sinó convertir 384 floats per vector a text i tornar-los a analitzar. Desar-los
 costa `{python} PG.emb_vs_text()` vegades més que desar el text de les mateixes
-files: és el preu de l'*impedance mismatch*. La generació
+files. Una part és inherent (384 valors per frase), però una altra és
+*impedance mismatch*: com que `REAL[]` no és un tipus vectorial, el vector
+viatja com a text, i la manera de serialitzar-lo ja canvia el cost
+`{python} PG.adapt_factor()` vegades (vegeu *El viatge dels vectors*). La generació
 (`{python} PG.generate_total()` s en total) és el cost més gran, però és un
 cost de Python que no depèn de la base de dades.
 
@@ -160,8 +165,9 @@ calcula tres sumes (producte escalar i dues normes) en lloc d'una.
 **Quines tècniques de PostgreSQL (sense pgvector) millorarien el rendiment?**
 
 - *Inserció.* `COPY` en lloc d'`INSERT` (mesurat: un
-  `{python} PG.copy_gain()` menys de temps amb lots de 1000; el guany és
-  limitat perquè el nombre de crides és el mateix); `COPY` **binari** per als
+  `{python} PG.copy_gain()` menys de temps amb lots de 1000, perquè el servidor
+  no ha d'analitzar un `INSERT` multi-fila; el guany és limitat perquè el nombre
+  de crides és el mateix); `COPY` **binari** per als
   embeddings, que evitaria
   justament la conversió float→text; taules `UNLOGGED` o
   `synchronous_commit = off` durant la càrrega; crear la clau primària i la
@@ -221,9 +227,11 @@ càrregues.
 **`C1`: substituir els vectors pels del nostre model.** Com a `P1`, el script
 llegeix els documents de la mateixa base de dades (un `get()`), genera els
 embeddings amb el model compartit amb PostgreSQL i els desa amb
-`update(ids, embeddings)` per lots a cada col·lecció. Així els tres sistemes
-cerquen sobre els mateixos vectors (llevat d'arrodoniments a la col·lecció
-de cosinus, vegeu [CQ1]). La diferència amb `P1` és que
+`update(ids, embeddings)` per lots a cada col·lecció. Després de `C1`, Chroma
+cerca sobre els mateixos embeddings (PyTorch) que PostgreSQL i pgvector; els
+que havia generat `C0` amb ONNX hi coincidien `{python} onnx_match()`, però no
+bit a bit (a la col·lecció de cosinus, a més, Chroma els arrodoneix en
+normalitzar-los, vegeu [CQ1]). La diferència amb `P1` és que
 Chroma rep directament l'array de numpy: no hi ha cap conversió
 float → text → float.
 
@@ -236,15 +244,15 @@ passa per l'índex HNSW i és **aproximada**; els resultats exactes de `P2`
 serveixen de referència per mesurar-ne el *recall*. A més, l'espai `l2` de
 Chroma retorna la distància euclidiana **al quadrat**.
 
-```{python}
-#| output: asis
-print(chroma_cost_table())
-```
+**Línies i crides.** `C0`, `C1` i `C2` ocupen `{python} str(system_lines("chroma/C0.py"))`, `{python} str(system_lines("chroma/C1.py"))` i
+`{python} str(system_lines("chroma/C2.py"))` línies de sistema: no cal esquema ni SQL, però la càrrega oficial es
+fa dues vegades (una per col·lecció) i cada consulta necessita dues crides
+(`get` + `query`). No hi ha `COMMIT`: Chroma no té transaccions explícites.
 
 ## [CQ1]
 
 **Són estables els temps d'inserció de text i embeddings?** Sí. A la mida
-triada, cada lot d'`add()` varia poc (CV per lot a la taula següent) i el
+triada, cada lot d'`add()` varia poc (CV per lot a les taules següents) i el
 temps total de les `{python} str(load("C0")["official"]["l2"]["repeats"])`
 càrregues oficials a L2 és de `{python} CH.official_load_avg()` s, amb una
 desviació de `{python} CH.official_load_std()` s entre càrregues
@@ -291,8 +299,8 @@ per al cosinus). Una consulta triga uns `{python} ms(load("C2")["timing"]["l2"][
 PostgreSQL**. Però el `{python} CH.nofilter_gain()` d'aquest temps és el filtre de metadades (vegeu
 les millores): sense filtre, obtenir el vector i cercar a l'índex HNSW triga
 `{python} CH.nofilter_ms()` ms, unes **`{python} CH.index_speedup()` vegades
-menys que la força bruta de `P2`**. Aquest és el guany real d'un índex
-vectorial. La diferència no ve de la xarxa: fins i tot un `INSERT` d'una fila amb el seu `COMMIT` (mida
+menys que la força bruta de `P2`**. Aquesta comparació aïlla millor el guany
+atribuïble a l'índex vectorial. La diferència no ve de la xarxa: fins i tot un `INSERT` d'una fila amb el seu `COMMIT` (mida
 de lot 1 a `P0`), que inclou l'anada i tornada, és només un
 `{python} CH.pg_call_share()` d'una consulta de `P2`.
 
@@ -334,7 +342,10 @@ que no té una existència independent.
 
 - *Generar els embeddings fora i passar-los a l'`add()`.* La funció per
   defecte (ONNX) és `{python} CH.onnx_vs_model()` vegades més lenta que el
-  mateix model amb PyTorch a `C1`, i a més es calcula un cop per col·lecció.
+  mateix model amb PyTorch a `C1` (els vectors coincideixen
+  `{python} onnx_match()`, així que la diferència és de l'entorn d'execució de
+  Chroma, no del model), i a més es
+  calcula un cop per col·lecció.
   Passant `embeddings=` s'evitarien totes dues coses.
 - *Una sola col·lecció.* Amb vectors normalitzats, L2, cosinus i producte
   escalar ordenen igual: una sola col·lecció serviria les dues mètriques i
@@ -378,9 +389,9 @@ el `REAL[]` de `P1`, i el vector es recupera bit a bit idèntic.
 l'índex depèn de la distància (classes d'operadors `vector_l2_ops` i
 `vector_cosine_ops`), però aquí **les dades es desen una sola vegada** i la
 taula té dos índexs. Es construeixen després de la càrrega, com recomana
-pgvector (Chroma, en canvi, actualitza l'índex dins de cada `add()`). Cada
-índex triga `{python} GV.index_build()` s i ocupa `{python} GV.index_mb()` MB,
-més que la taula sencera (`{python} GV.table_mb()` MB).
+pgvector (Chroma, en canvi, actualitza l'índex dins de cada `add()`). Construir-los
+triga `{python} GV.index_build("l2")` s (L2) i `{python} GV.index_build("cosine")` s (cosinus), i cadascun ocupa
+`{python} GV.index_mb()` MB, més que la taula sencera (`{python} GV.table_mb()` MB).
 
 **Consulta: una sola crida SQL.** `ORDER BY embedding <-> (SELECT embedding …
 WHERE sentence_id = q) LIMIT 2`, amb `WHERE sentence_id <> q` per excloure la
@@ -391,10 +402,10 @@ sobre la mateixa taula: **exacta** (índexs desactivats, força bruta) i
 **HNSW** (aproximada); `EXPLAIN` comprova que cadascuna fa servir el pla
 esperat, i la configuració exacta ha de coincidir amb `P2`.
 
-```{python}
-#| output: asis
-print(pgv_cost_table())
-```
+**Línies i crides.** `G0` no té codi de sistema propi (és el de `P0`), `G1`
+en té `{python} str(system_lines("pgvector/G1.py"))` (inclosa la creació dels índexs) i `G2`, `{python} str(system_lines("pgvector/G2.py"))`,
+davant de les `{python} str(system_lines("postgres/P2.py"))` de `P2`. Les crides són les de PostgreSQL, més dos
+`CREATE INDEX`.
 
 ## Resultats i preguntes
 
@@ -417,8 +428,11 @@ print(pgv_stats_table())
 **Estabilitat de les consultes i diferències entre mètriques.** Les dues
 mètriques donen el mateix top-2 (`{python} GV.same_topk()`) i compleixen la
 identitat ($|L2^2 - 2\,d_{cos}| \le$ `{python} GV.identity_error()`; aquí
-`<->` retorna la distància L2 sense elevar al quadrat); els temps són
-equivalents.
+`<->` retorna la distància L2 sense elevar al quadrat), amb temps
+equivalents. Les consultes exactes són estables (CV
+`{python} GV.query_cv("exact")`); amb HNSW el CV és més alt (`{python} GV.query_cv("hnsw")` a L2), però
+sobre temps d'un mil·lisegon, on qualsevol interrupció del sistema pesa
+proporcionalment més.
 
 ```{python}
 #| output: asis
@@ -428,9 +442,10 @@ print(pgv_query_table())
 La dada més reveladora és la **cerca exacta**: fa la mateixa força bruta que
 `P2`, però amb la distància implementada en C dins el tipus, i triga
 `{python} GV.query_ms("exact")` ms, **`{python} GV.speedup_vs_p2("exact")`
-vegades menys**. El cost de `P2` no era l'algorisme, sinó haver d'expressar la
-distància en SQL interpretat sobre un tipus que la BD no entén: és
-l'*impedance mismatch* mesurat. L'índex HNSW baixa a
+vegades menys**. Amb el mateix algorisme, el `{python} p2_overhead_share()` del
+temps de `P2` ve d'haver d'expressar la distància en SQL interpretat sobre un
+tipus que la BD no entén, no de la cerca exhaustiva: és l'*impedance
+mismatch* mesurat. L'índex HNSW baixa a
 `{python} GV.query_ms("hnsw")` ms (`{python} GV.speedup_vs_p2("hnsw")`× `P2`)
 amb *recall* del `{python} GV.recall("hnsw")` i `ef_search` =
 `{python} GV.ef_search()`.
@@ -451,20 +466,66 @@ mètriques.
   existir sense ell i cada mètrica exigeix una col·lecció (i una còpia) nova.
 - *Rendiment.* En aquest experiment pgvector amb HNSW respon
   `{python} GV.vs_chroma()` vegades més ràpid que Chroma amb el filtre
-  d'exclusió, perquè el `WHERE` és un filtre SQL barat i no un filtre de
-  metadades; sense filtre, els dos índexs queden en el mateix ordre de
+  d'exclusió, perquè el `WHERE` és un filtre SQL barat: `EXPLAIN` mostra que
+  PostgreSQL recorre l'índex HNSW en ordre de distància i descarta la pròpia
+  frase sobre la sortida de l'índex, sense cap filtre de metadades; sense filtre, els dos índexs queden en el mateix ordre de
   magnitud. Chroma s'estalvia la conversió a text dels vectors, però no n'és
   més ràpid en desar-los.
 - *Contres de pgvector:* cal una extensió instal·lada al servidor, el
   conductor encara serialitza els vectors a text, i l'índex s'ha de crear,
   dimensionar i ajustar a mà. *Contres de Chroma:* sense transaccions ni
-  SQL, dades duplicades per mètrica, i filtres per metadades cars; a favor,
+  SQL, dades duplicades per mètrica, i un filtre de metadades que aquí encareix la consulta; a favor,
   una API mínima (`add`/`query`) i la generació d'embeddings integrada.
 
 # Discussió
 
-TODO: PostgreSQL vs. Chroma (i pgvector) des de l'impedance mismatch.
-Taula comparativa final i pros/contres de cada sistema.
+En les 10 consultes, els tres sistemes han retornat els mateixos top-2 (Taula
+següent; amb HNSW és un resultat observat, no una garantia): la diferència
+entre ells no és *què* responen, sinó quant costa arribar-hi i
+quanta feina s'ha d'afegir al sistema per fer-ho.
+
+```{python}
+#| output: asis
+print(top2_table())
+print(comparison_table())
+```
+
+**Una gradació de l'*impedance mismatch*.** Les dades mostren tres graus
+d'encaix entre la naturalesa de les dades i la representació interna de cada
+sistema. A **PostgreSQL pur** el desajust és complet: el vector és un array
+genèric que la base de dades no entén, i tot el que el fa útil (la distància,
+el rànquing, l'exclusió) s'ha d'escriure a mà en SQL interpretat, amb un cost
+en línies de codi i en temps: la mateixa força bruta que pgvector fa en
+`{python} GV.query_ms("exact")` ms hi triga `{python} PG.query_avg_ms("l2")` ms.
+**pgvector** tanca el desajust dins el mateix motor: el vector passa a ser un
+tipus amb operadors i índexs, i el model relacional (taules, SQL,
+transaccions, una sola còpia de les dades) es conserva intacte; només queda el
+desajust a la frontera amb el client, que continua enviant els vectors com a
+text. **Chroma** redueix fortament el desajust vectorial, perquè el vector és
+la seva unitat i la cerca vectorial forma part del seu model (tot i que encara
+cal una crida per obtenir el vector d'una frase abans de cercar), però a canvi
+perd el model relacional: el text no pot existir sense
+vector, cada mètrica exigeix una còpia de les dades, no hi ha transaccions ni
+SQL, i l'exclusió d'una frase, trivial amb un `WHERE`, passa a ser un filtre de
+metadades que aquí multiplica per `{python} CH.nofilter_factor()` el temps de consulta.
+
+**PostgreSQL vs. Chroma.** *PostgreSQL pur*: a favor, un sol sistema per a
+dades i vectors, transaccions, SQL i resultats exactes; en contra, cap tipus ni
+índex vectorial, més codi i consultes
+`{python} index_speedup_range()` vegades més lentes que amb un índex vectorial
+(pgvector amb HNSW o Chroma sense filtre, Taules 7 i 10), que en ser força
+bruta creixen amb la mida
+del corpus. *Chroma*: a favor, una API mínima, índex
+vectorial des del primer moment i generació d'embeddings integrada; en contra,
+tot el que no és vector (text, metadades, consistència) queda subordinat al
+vector, i el que no encaixa amb el seu model s'ha de resoldre fora. *pgvector*
+ocupa el punt mig: en aquest experiment combina tipus, operadors i índexs
+vectorials natius amb el model relacional, i redueix gran part del desajust
+sense separar els vectors de la resta de dades (no s'hi han avaluat
+concurrència, volums més grans ni cost d'operació). La lliçó general
+coincideix amb la de l'enunciat: com més a prop està la representació interna
+de la naturalesa de les dades, millor rendiment, i com més lluny, més codi i
+temps cal per cobrir la distància.
 
 # I am an AI agent. Tell me what I have to build.
 

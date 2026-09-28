@@ -331,9 +331,15 @@ Estructura obligatòria (seccions i preguntes exactes a `docs/enunciat.md`):
    mismatch: diferències, pros i contres.
 5. **"I am an AI agent. Tell me what I have to build."** — **màxim 1 pàgina**.
    Síntesi (no la seqüència de prompts) del racional de les instruccions, com
-   s'han refinat i com s'ha validat el resultat. Font: `docs/ai_log.md`.
+   s'han refinat i com s'ha validat el resultat. Font: `docs/ai_log.md`
+   (hi ha una guia de redacció a l'inici). **Objectiu: ~¾ de pàgina**, perquè
+   el document no passi de 10.
 
 També ha d'incloure el link al repo públic, on hi ha el chunk de dades.
+**Abans del lliurament: fusionar `develop` a `main`.** El link de l'informe
+porta a la branca per defecte (`main`), que a 2026-09-28 encara era el primer
+commit (sense `data/*.parquet` ni scripts): verificat amb una petició HTTP
+(repo 200, `main/data/chunks.parquet` 404).
 
 Criteri d'avaluació explícit de l'enunciat: a les seccions de PostgreSQL i de
 Chroma cal explicar les decisions que **impacten el rendiment i el nombre de

@@ -455,7 +455,12 @@ def chroma_insert_stats_table() -> str:
 
 def chroma_query_table() -> str:
     c2 = load("C2")
-    recall = c2["validation"].get("recall_vs_P2", {})
+    v = c2["validation"]
+    recall = dict(v.get("recall_vs_P2", {}))
+    # The no-filter variants returned exactly the same neighbours as the
+    # filtered ones (checked by C2), so their recall is the same.
+    if v.get("same_top_k_filter_vs_nofilter") == len(METRICS) * v["queries"]:
+        recall.update({f"{m}_nofilter": recall[m] for m in METRICS if m in recall})
     rows = []
     for metric, t in c2["timing"].items():
         s = t["query_time"]
@@ -469,7 +474,8 @@ def chroma_query_table() -> str:
         f"`C2`: temps **per consulta** del top-{c2['k']} (`get()` + `query()`); "
         f"n = 10 consultes × {c2['repeats']} rondes. *Recall*: part dels veïns exactes de "
         f"`P2` que retorna l'índex HNSW. Les files *sense filtre* són una variant de "
-        f"referència: demanen k + 1 veïns i descarten la pròpia frase a Python.")
+        f"referència: demanen k + 1 veïns i descarten la pròpia frase a Python; retornen "
+        f"els mateixos veïns que amb el filtre, i per tant el mateix *recall*.")
 
 
 def chroma_cost_table() -> str:
@@ -869,3 +875,126 @@ class GV2:
         g = _by_size(load("G0")["grid"])[1]["total_time"]["avg"]
         p = _by_size(load("P0")["grid"])[1]["total_time"]["avg"]
         return pct(abs(g / p - 1))
+
+
+# --------------------------------------------------------------------------
+# Discussion
+# --------------------------------------------------------------------------
+
+
+def _neighbours(answers: list[dict]) -> dict[str, dict[int, list[int]]]:
+    return {m: {a["sentence_id"]: [n["sentence_id"] for n in a[m]] for a in answers}
+            for m in METRICS}
+
+
+def top2_table() -> str:
+    """The top-2 neighbours of each query, checked identical in every system.
+
+    Fails if any system disagrees, so the caption can never claim more than
+    the data shows.
+    """
+    p2 = load("P2")
+    reference = _neighbours(p2["answers"])
+    systems = {"C2": load("C2")["answers"], "G2": load("G2")["answers"]}
+    for name, answers in systems.items():
+        if _neighbours(answers) != reference:
+            raise RuntimeError(f"{name} top-2 differs from P2: the table would be wrong")
+    if reference["l2"] != reference["cosine"]:
+        raise RuntimeError("L2 and cosine top-2 differ in P2")
+
+    rows = []
+    for a in p2["answers"]:
+        first, second = a["cosine"]
+        text = first["text"] if len(first["text"]) <= 60 else first["text"][:57] + "…"
+        rows.append([str(a["sentence_id"]), str(first["sentence_id"]), num(first["distance"], 3),
+                     f"*{text}*", str(second["sentence_id"]), num(second["distance"], 3)])
+    return table(
+        ["Consulta", "1r veí", "$d_{cos}$", "Text del 1r veí", "2n veí", "$d_{cos}$"],
+        rows, "rrrlrr",
+        "Top-2 de cada consulta (ID = `sentence_id`). **Idèntic a PostgreSQL pur (P2), "
+        "Chroma (C2) i pgvector (G2)** i per a les dues mètriques; es mostra la distància "
+        "cosinus.",
+        widths=[10, 9, 9, 50, 9, 9])
+
+
+def comparison_table() -> str:
+    """The three systems side by side, from the impedance mismatch viewpoint."""
+    p0, p1, p2 = load("P0"), load("P1"), load("P2")
+    c0, c1, c2 = load("C0"), load("C1"), load("C2")
+    g0, g1, g2 = load("G0"), load("G1"), load("G2")
+    size = DEFAULT_BATCH_SIZE
+
+    def total(r, name="grid"):
+        return _by_size(r[name])[size]["total_time"]["avg"]
+
+    def q(t):
+        return ms(t["query_time"]["avg"], 1)
+
+    def lines(*scripts):
+        return " / ".join(str(system_lines(s)) for s in scripts)
+
+    rows = [
+        ["Element central", "la fila (text)", "la fila, amb el vector com a columna",
+         "el vector (el text n'és un atribut)"],
+        ["Tipus del vector", "`REAL[]` genèric", "`vector(384)`", "vector de la col·lecció"],
+        ["Com viatja el vector", "text `'{…}'`", "text `'[…]'`", "array numpy"],
+        ["On es calcula la distància", "funcions SQL escrites a mà", "operadors natius (C)",
+         "índex HNSW"],
+        ["Índex vectorial", "cap de possible", "HNSW / IVFFlat, un per mètrica",
+         "HNSW, sempre"],
+        ["Cerca", "exacta", "exacta o aproximada", "aproximada"],
+        ["Dades per mètrica", "1 taula", "1 taula + 1 índex per mètrica",
+         "1 col·lecció (còpia) per mètrica"],
+        ["Transaccions i SQL", "sí", "sí", "no"],
+        ["Línies de sistema (text / emb. / cerca)",
+         lines("postgres/P0.py", "postgres/P1.py", "postgres/P2.py"),
+         f"0 / {system_lines('pgvector/G1.py')} / {system_lines('pgvector/G2.py')}",
+         lines("chroma/C0.py", "chroma/C1.py", "chroma/C2.py")],
+        ["Crides per consulta", "1", "1", "2 (`get` + `query`)"],
+        ["Desar el text: total de la càrrega, lots de 1000 (s)", num(total(p0), 2), num(total(g0), 2),
+         # Chroma: the 3 official loads, like the 3 grid loads of P0 and G0.
+         f"{num(c0['official']['l2']['total_time']['avg'], 1)} (amb embeddings)"],
+        ["Desar els embeddings: total de la càrrega, lots de 1000 (s)", num(total(p1), 2), num(total(g1), 2),
+         num(c1["store"]["l2"]["total_time"]["avg"], 2)],
+        ["Consulta top-2, L2: per consulta (ms)", q(p2["timing"]["l2"]),
+         f"{q(g2['configs']['exact']['timing']['l2'])} exacta, "
+         f"{q(g2['configs']['hnsw']['timing']['l2'])} HNSW",
+         f"{q(c2['timing']['l2'])} ({q(c2['timing']['l2_nofilter'])} sense filtre)"],
+    ]
+    return table(
+        ["", "PostgreSQL pur", "pgvector", "Chroma"], rows, "llll",
+        "Els tres sistemes des de l'*impedance mismatch*. Línies de sistema: mateix "
+        "criteri a tots (només codi que parla amb el sistema, sense validacions ni "
+        "`common.py`); a Chroma, la càrrega del text inclou la generació d'embeddings. "
+        "Temps: mitjana de les 3 càrregues (o de les consultes) de les seccions anteriors.",
+        widths=[27, 21, 26, 26])
+
+
+def index_speedup_range() -> str:
+    """Range of 'P2 time / vector-index time' over every index measured
+    (pgvector HNSW and Chroma without the filter, both metrics)."""
+    p2 = load("P2")["timing"]
+    g2 = load("G2")["configs"]["hnsw"]["timing"]
+    c2 = load("C2")["timing"]
+    factors = [p2[m]["query_time"]["avg"] / g2[m]["query_time"]["avg"] for m in METRICS]
+    factors += [p2[m]["query_time"]["avg"] / c2[f"{m}_nofilter"]["query_time"]["avg"]
+                for m in METRICS]
+    return f"entre {num(min(factors), 0)} i {num(max(factors), 0)}"
+
+
+def onnx_match() -> str:
+    """How closely Chroma's ONNX vectors match our model's, for running text.
+
+    The value is only valid when C1 ran right after C0 (otherwise the JSON
+    stores null); without it, a wording that does not need the number.
+    """
+    diff = load("C1")["validation"]["onnx_vs_model_max_abs_diff"]
+    return f"fins a {sci(diff)}" if diff is not None else "amb diferències mínimes"
+
+
+def p2_overhead_share() -> str:
+    """Share of P2's query time that pgvector's exact search (same brute force,
+    native distance) does without: 1 - t_exact / t_P2."""
+    g = load("G2")["configs"]["exact"]["timing"]["l2"]["query_time"]["avg"]
+    p = load("P2")["timing"]["l2"]["query_time"]["avg"]
+    return pct(1 - g / p)
