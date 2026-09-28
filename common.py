@@ -61,7 +61,9 @@ METRICS = ("l2", "cosine")
 #: Batch sizes explored when measuring insertion performance.
 BATCH_SIZES = (1, 10, 50, 100, 500, 1000, 2000)
 #: Batch size used for the "official" runs once the grid has been explored.
-DEFAULT_BATCH_SIZE = 500
+#: Chosen from P0's grid: 28 % faster than 500, while 2000 only saves another
+#: 15 % and would leave just 5 batches to compute min/max/avg/std over.
+DEFAULT_BATCH_SIZE = 1000
 
 # --------------------------------------------------------------------------
 # PostgreSQL connection
@@ -76,12 +78,74 @@ PGVECTOR_DATABASE = "cbde_pgvector"
 def pg_config(dbname: str = PG_DATABASE) -> dict[str, Any]:
     """Connection parameters for psycopg2, overridable through the environment."""
     return {
-        "host": os.getenv("PGHOST", "localhost"),
+        # 127.0.0.1, not "localhost": on Windows "localhost" resolves to ::1
+        # first, and Docker Desktop's IPv6 port forwarding stalls ~45 ms on
+        # every message of roughly 32-70 KB (a 500-row INSERT), which would
+        # be measured as if it were PostgreSQL's cost.
+        "host": os.getenv("PGHOST", "127.0.0.1"),
         "port": int(os.getenv("PGPORT", "5432")),
         "dbname": os.getenv("PGDATABASE", dbname),
         "user": os.getenv("PGUSER", "cbde"),
         "password": os.getenv("PGPASSWORD", "cbde"),
     }
+
+
+def pgvector_connect():
+    """Connection to the pgvector database, with the extension enabled.
+
+    The extension lives only in ``cbde_pgvector``: the plain-PostgreSQL part
+    (database ``cbde``) never enables it. Fails with a clear message if the
+    database was not created (see README).
+    """
+    import psycopg2
+
+    try:
+        conn = psycopg2.connect(**pg_config(PGVECTOR_DATABASE))
+    except psycopg2.OperationalError as exc:
+        if "does not exist" in str(exc):
+            raise RuntimeError(
+                f"database '{PGVECTOR_DATABASE}' does not exist. Create it once with:\n"
+                f'  docker exec cbde_postgres psql -U cbde -d cbde -c '
+                f'"CREATE DATABASE {PGVECTOR_DATABASE} OWNER cbde"') from exc
+        raise
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
+    return conn
+
+
+# --------------------------------------------------------------------------
+# Chroma
+# --------------------------------------------------------------------------
+
+#: On-disk store of the embedded (in-process) Chroma client; git-ignored.
+CHROMA_PATH = ROOT / "chroma" / "chroma_db"
+#: One collection per metric: Chroma fixes the distance when a collection is
+#: created, so the same data is stored twice.
+CHROMA_COLLECTIONS = {"l2": "sentences_l2", "cosine": "sentences_cosine"}
+
+
+def chroma_client():
+    """Persistent in-process Chroma client, with telemetry off.
+
+    Telemetry would make network calls from inside the timed sections.
+    """
+    import chromadb  # heavy import
+    from chromadb.config import Settings
+
+    return chromadb.PersistentClient(path=str(CHROMA_PATH),
+                                     settings=Settings(anonymized_telemetry=False))
+
+
+def chroma_collections(client) -> dict:
+    """The existing collections, keyed by metric; fails clearly if C0 was not run."""
+    collections = {}
+    for space, name in CHROMA_COLLECTIONS.items():
+        try:
+            collections[space] = client.get_collection(name)
+        except Exception as exc:  # noqa: BLE001 - chromadb raises several types
+            raise RuntimeError(f"collection '{name}' not found. Run chroma/C0.py first.") from exc
+    return collections
 
 
 # --------------------------------------------------------------------------
@@ -117,6 +181,29 @@ def _require(path: Path) -> None:
         raise FileNotFoundError(
             f"{path} not found. Run `python data/prepare_corpus.py` first."
         )
+
+
+def exact_reference() -> dict[str, dict[int, list[int]]] | None:
+    """P2's exact top-k neighbour ids per metric and query, or None if P2 has
+    not been run. It is the reference for the recall of C2 and G2."""
+    path = RESULTS_DIR / "P2.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as fh:
+        p2 = json.load(fh)
+    return {m: {a["sentence_id"]: [n["sentence_id"] for n in a[m]] for a in p2["answers"]}
+            for m in METRICS}
+
+
+def recall_at_k(reference: dict, answers: dict, queries: list[dict], k: int) -> dict[str, float]:
+    """Share of the exact neighbours (``reference``) also returned in
+    ``answers`` ({metric: {sentence_id: [(neighbour_id, distance), ...]}})."""
+    return {
+        m: sum(len(set(reference[m][q["sentence_id"]])
+                   & {n for n, _ in answers[m][q["sentence_id"]]}) for q in queries)
+           / (k * len(queries))
+        for m in METRICS
+    }
 
 
 # --------------------------------------------------------------------------
@@ -208,6 +295,31 @@ def batched(items: Sequence[Any], size: int) -> Iterator[Sequence[Any]]:
 
 def n_batches(total: int, size: int) -> int:
     return (total + size - 1) // size
+
+
+def generate_embeddings(texts: list[str], batch_size: int):
+    """Encode ``texts`` batch by batch with the shared model.
+
+    Returns ``(embeddings, times)``: a float32 array of shape
+    ``(len(texts), EMBEDDING_DIM)`` and the time of each batch. A warm-up call
+    runs first, outside the timing, so no batch pays one-off initialisation.
+    Used by P1, C1 and G1 so the three systems store identical vectors.
+    """
+    import numpy as np
+
+    model = get_model()
+    model.encode(texts[:8])
+
+    parts = []
+    times: list[float] = []
+    for batch in batched(texts, batch_size):
+        with Timer() as t:
+            parts.append(model.encode(list(batch), convert_to_numpy=True))
+        times.append(t.elapsed)
+    embeddings = np.vstack(parts).astype(np.float32, copy=False)
+    if embeddings.shape != (len(texts), EMBEDDING_DIM):
+        raise RuntimeError(f"unexpected embedding shape {embeddings.shape}")
+    return embeddings, times
 
 
 # --------------------------------------------------------------------------

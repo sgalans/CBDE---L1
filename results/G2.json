@@ -1,0 +1,844 @@
+{
+  "script": "G2",
+  "timestamp": "2026-09-28 19:58:55",
+  "database": "cbde_pgvector",
+  "k": 2,
+  "metrics": [
+    "l2",
+    "cosine"
+  ],
+  "operators": {
+    "l2": "<->",
+    "cosine": "<=>"
+  },
+  "repeats": 3,
+  "configs": {
+    "exact": {
+      "uses_index": {
+        "l2": false,
+        "cosine": false
+      },
+      "timing": {
+        "l2": {
+          "query_time": {
+            "n": 30,
+            "min": 0.0026078999508172274,
+            "max": 0.0035806000232696533,
+            "avg": 0.0029910499540468055,
+            "std": 0.0003106508383964303,
+            "total": 0.08973149862140417
+          },
+          "per_query": {
+            "654": {
+              "n": 3,
+              "min": 0.0027968999929726124,
+              "max": 0.003218800062313676,
+              "avg": 0.002992199966683984,
+              "std": 0.00021268448545104282,
+              "total": 0.008976599900051951
+            },
+            "1114": {
+              "n": 3,
+              "min": 0.0027854000218212605,
+              "max": 0.00331699987873435,
+              "avg": 0.0029720666352659464,
+              "std": 0.00029905826623218874,
+              "total": 0.00891619990579784
+            },
+            "2025": {
+              "n": 3,
+              "min": 0.0026078999508172274,
+              "max": 0.0028522000648081303,
+              "avg": 0.0027386666430781284,
+              "std": 0.00012305842366081815,
+              "total": 0.008215999929234385
+            },
+            "3759": {
+              "n": 3,
+              "min": 0.0026199999265372753,
+              "max": 0.0035737999714910984,
+              "avg": 0.003048499890913566,
+              "std": 0.0004842120695634395,
+              "total": 0.009145499672740698
+            },
+            "4281": {
+              "n": 3,
+              "min": 0.002876600017771125,
+              "max": 0.0035614999942481518,
+              "avg": 0.003140166634693742,
+              "std": 0.000368700085781171,
+              "total": 0.009420499904081225
+            },
+            "5250": {
+              "n": 3,
+              "min": 0.0027849001344293356,
+              "max": 0.0035806000232696533,
+              "avg": 0.003079000006740292,
+              "std": 0.00043655104015809845,
+              "total": 0.009237000020220876
+            },
+            "6228": {
+              "n": 3,
+              "min": 0.0026318999007344246,
+              "max": 0.003528999863192439,
+              "avg": 0.003026966548835238,
+              "std": 0.0004580158146047436,
+              "total": 0.009080899646505713
+            },
+            "7142": {
+              "n": 3,
+              "min": 0.002669599838554859,
+              "max": 0.00322819990105927,
+              "avg": 0.0029498332490523658,
+              "std": 0.00027930471003534754,
+              "total": 0.008849499747157097
+            },
+            "8754": {
+              "n": 3,
+              "min": 0.002611299976706505,
+              "max": 0.0029708000365644693,
+              "avg": 0.002820266643539071,
+              "std": 0.00018673754008055696,
+              "total": 0.008460799930617213
+            },
+            "9104": {
+              "n": 3,
+              "min": 0.0027507999911904335,
+              "max": 0.00348650012165308,
+              "avg": 0.0031428333216657243,
+              "std": 0.0003702271754534896,
+              "total": 0.009428499964997172
+            }
+          },
+          "raw": [
+            0.003218800062313676,
+            0.00331699987873435,
+            0.0028522000648081303,
+            0.0026199999265372753,
+            0.0029823998920619488,
+            0.0035806000232696533,
+            0.003528999863192439,
+            0.00322819990105927,
+            0.0029708000365644693,
+            0.003191199852153659,
+            0.0027968999929726124,
+            0.0027854000218212605,
+            0.002755899913609028,
+            0.0035737999714910984,
+            0.002876600017771125,
+            0.0027849001344293356,
+            0.00291999988257885,
+            0.002669599838554859,
+            0.002611299976706505,
+            0.00348650012165308,
+            0.002960899844765663,
+            0.0028138000052422285,
+            0.0026078999508172274,
+            0.002951699774712324,
+            0.0035614999942481518,
+            0.002871499862521887,
+            0.0026318999007344246,
+            0.002951700007542968,
+            0.002878699917346239,
+            0.0027507999911904335
+          ]
+        },
+        "cosine": {
+          "query_time": {
+            "n": 30,
+            "min": 0.0026320999022573233,
+            "max": 0.0037824998144060373,
+            "avg": 0.003043469996191561,
+            "std": 0.00029400745297423266,
+            "total": 0.09130409988574684
+          },
+          "per_query": {
+            "654": {
+              "n": 3,
+              "min": 0.0028724002186208963,
+              "max": 0.0037824998144060373,
+              "avg": 0.003241966633747021,
+              "std": 0.0004785316549086937,
+              "total": 0.009725899901241064
+            },
+            "1114": {
+              "n": 3,
+              "min": 0.002725300146266818,
+              "max": 0.003607999999076128,
+              "avg": 0.003060233391200503,
+              "std": 0.00047829205285398194,
+              "total": 0.009180700173601508
+            },
+            "2025": {
+              "n": 3,
+              "min": 0.0026320999022573233,
+              "max": 0.0035236000549048185,
+              "avg": 0.003023966603601972,
+              "std": 0.0004554156176944762,
+              "total": 0.009071899810805917
+            },
+            "3759": {
+              "n": 3,
+              "min": 0.0026418999768793583,
+              "max": 0.0033452000934630632,
+              "avg": 0.0029679666428516307,
+              "std": 0.0003544309430402428,
+              "total": 0.008903899928554893
+            },
+            "4281": {
+              "n": 3,
+              "min": 0.003164400113746524,
+              "max": 0.0034010999370366335,
+              "avg": 0.0032608333664635816,
+              "std": 0.000124288862743573,
+              "total": 0.009782500099390745
+            },
+            "5250": {
+              "n": 3,
+              "min": 0.0028788000345230103,
+              "max": 0.0031465000938624144,
+              "avg": 0.0030412000293533006,
+              "std": 0.00014269243839318382,
+              "total": 0.009123600088059902
+            },
+            "6228": {
+              "n": 3,
+              "min": 0.0028158999048173428,
+              "max": 0.003256900003179908,
+              "avg": 0.0029736332750568786,
+              "std": 0.00024584393351286275,
+              "total": 0.008920899825170636
+            },
+            "7142": {
+              "n": 3,
+              "min": 0.0027942999731749296,
+              "max": 0.0029513000044971704,
+              "avg": 0.0028828999493271112,
+              "std": 8.042561821061211e-05,
+              "total": 0.008648699847981334
+            },
+            "8754": {
+              "n": 3,
+              "min": 0.0027828000020235777,
+              "max": 0.003345400094985962,
+              "avg": 0.0031326666940003633,
+              "std": 0.000305342219114678,
+              "total": 0.00939800008200109
+            },
+            "9104": {
+              "n": 3,
+              "min": 0.0027226998936384916,
+              "max": 0.0029381001368165016,
+              "avg": 0.002849333376313249,
+              "std": 0.00011258211525947155,
+              "total": 0.008548000128939748
+            }
+          },
+          "raw": [
+            0.0030709998682141304,
+            0.002847400028258562,
+            0.0026320999022573233,
+            0.002916799858212471,
+            0.003217000048607588,
+            0.0030982999596744776,
+            0.0028158999048173428,
+            0.0029030998703092337,
+            0.0032697999849915504,
+            0.0029381001368165016,
+            0.0037824998144060373,
+            0.003607999999076128,
+            0.0035236000549048185,
+            0.0033452000934630632,
+            0.0034010999370366335,
+            0.0031465000938624144,
+            0.003256900003179908,
+            0.0029513000044971704,
+            0.003345400094985962,
+            0.0028872000984847546,
+            0.0028724002186208963,
+            0.002725300146266818,
+            0.002916199853643775,
+            0.0026418999768793583,
+            0.003164400113746524,
+            0.0028788000345230103,
+            0.0028480999171733856,
+            0.0027942999731749296,
+            0.0027828000020235777,
+            0.0027226998936384916
+          ]
+        }
+      },
+      "validation": {
+        "same_top_k_l2_vs_cosine": 10,
+        "max_abs_error_l2sq_vs_2cos": 2.1192308075068667e-07,
+        "excludes_query_itself": true,
+        "recall_vs_P2": {
+          "l2": 1.0,
+          "cosine": 1.0
+        }
+      }
+    },
+    "hnsw": {
+      "uses_index": {
+        "l2": true,
+        "cosine": true
+      },
+      "timing": {
+        "l2": {
+          "query_time": {
+            "n": 30,
+            "min": 0.0006844000890851021,
+            "max": 0.001369900070130825,
+            "avg": 0.0009089700023954113,
+            "std": 0.00016439614919893248,
+            "total": 0.02726910007186234
+          },
+          "per_query": {
+            "654": {
+              "n": 3,
+              "min": 0.0007580998353660107,
+              "max": 0.0008871001191437244,
+              "avg": 0.0008255333329240481,
+              "std": 6.469993840900015e-05,
+              "total": 0.0024765999987721443
+            },
+            "1114": {
+              "n": 3,
+              "min": 0.000924399821087718,
+              "max": 0.0012107000220566988,
+              "avg": 0.001044599882637461,
+              "std": 0.00014856669926345862,
+              "total": 0.003133799647912383
+            },
+            "2025": {
+              "n": 3,
+              "min": 0.0009226999245584011,
+              "max": 0.0010995999909937382,
+              "avg": 0.001002799952402711,
+              "std": 8.962464028051675e-05,
+              "total": 0.0030083998572081327
+            },
+            "3759": {
+              "n": 3,
+              "min": 0.0008707998786121607,
+              "max": 0.0009682001546025276,
+              "avg": 0.0009065667012085518,
+              "std": 5.36051805552769e-05,
+              "total": 0.002719700103625655
+            },
+            "4281": {
+              "n": 3,
+              "min": 0.0007322998717427254,
+              "max": 0.001108699943870306,
+              "avg": 0.0008636666461825371,
+              "std": 0.00021238953000294241,
+              "total": 0.0025909999385476112
+            },
+            "5250": {
+              "n": 3,
+              "min": 0.0006844000890851021,
+              "max": 0.0008344999514520168,
+              "avg": 0.00074393341007332,
+              "std": 7.971692258545051e-05,
+              "total": 0.00223180023021996
+            },
+            "6228": {
+              "n": 3,
+              "min": 0.0007963001262396574,
+              "max": 0.0008859001100063324,
+              "avg": 0.0008275333481530348,
+              "std": 5.058864511924129e-05,
+              "total": 0.0024826000444591045
+            },
+            "7142": {
+              "n": 3,
+              "min": 0.0009178000036627054,
+              "max": 0.000976799987256527,
+              "avg": 0.0009383333381265402,
+              "std": 3.3338451481798295e-05,
+              "total": 0.0028150000143796206
+            },
+            "8754": {
+              "n": 3,
+              "min": 0.0007186001166701317,
+              "max": 0.0012455000542104244,
+              "avg": 0.0009140333471198877,
+              "std": 0.0002885909148262025,
+              "total": 0.002742100041359663
+            },
+            "9104": {
+              "n": 3,
+              "min": 0.0008449000306427479,
+              "max": 0.001369900070130825,
+              "avg": 0.0010227000651260216,
+              "std": 0.000300713356662357,
+              "total": 0.003068100195378065
+            }
+          },
+          "raw": [
+            0.0008314000442624092,
+            0.0009986998047679663,
+            0.0009860999416559935,
+            0.0008707998786121607,
+            0.0007322998717427254,
+            0.0006844000890851021,
+            0.0008003998082131147,
+            0.0009178000036627054,
+            0.0007186001166701317,
+            0.0008449000306427479,
+            0.0008871001191437244,
+            0.000924399821087718,
+            0.0010995999909937382,
+            0.0008807000704109669,
+            0.0007500001229345798,
+            0.0007129001896828413,
+            0.0008859001100063324,
+            0.000976799987256527,
+            0.0012455000542104244,
+            0.001369900070130825,
+            0.0007580998353660107,
+            0.0012107000220566988,
+            0.0009226999245584011,
+            0.0009682001546025276,
+            0.001108699943870306,
+            0.0008344999514520168,
+            0.0007963001262396574,
+            0.0009204000234603882,
+            0.0007779998704791069,
+            0.0008533000946044922
+          ]
+        },
+        "cosine": {
+          "query_time": {
+            "n": 30,
+            "min": 0.0007148999720811844,
+            "max": 0.0011628998909145594,
+            "avg": 0.0009053233234832685,
+            "std": 0.00010495277162517217,
+            "total": 0.027159699704498053
+          },
+          "per_query": {
+            "654": {
+              "n": 3,
+              "min": 0.0009822000283747911,
+              "max": 0.0010547998826950788,
+              "avg": 0.0010164333507418633,
+              "std": 3.6475982206706795e-05,
+              "total": 0.0030493000522255898
+            },
+            "1114": {
+              "n": 3,
+              "min": 0.0009574000723659992,
+              "max": 0.0010291999205946922,
+              "avg": 0.0009914333155999582,
+              "std": 3.604522220688134e-05,
+              "total": 0.0029742999467998743
+            },
+            "2025": {
+              "n": 3,
+              "min": 0.0008887001313269138,
+              "max": 0.0010132999159395695,
+              "avg": 0.0009708333139618238,
+              "std": 7.114319923333173e-05,
+              "total": 0.0029124999418854713
+            },
+            "3759": {
+              "n": 3,
+              "min": 0.0009268999565392733,
+              "max": 0.0009634001180529594,
+              "avg": 0.0009448667212078968,
+              "std": 1.825667690596584e-05,
+              "total": 0.0028346001636236906
+            },
+            "4281": {
+              "n": 3,
+              "min": 0.0007577999494969845,
+              "max": 0.0009312001056969166,
+              "avg": 0.0008345333238442739,
+              "std": 8.840197448938043e-05,
+              "total": 0.0025035999715328217
+            },
+            "5250": {
+              "n": 3,
+              "min": 0.0007148999720811844,
+              "max": 0.0009568999521434307,
+              "avg": 0.0008119666793694099,
+              "std": 0.0001279038844448688,
+              "total": 0.0024359000381082296
+            },
+            "6228": {
+              "n": 3,
+              "min": 0.0007587999571114779,
+              "max": 0.0008132997900247574,
+              "avg": 0.0007906332612037659,
+              "std": 2.8382746053715215e-05,
+              "total": 0.0023718997836112976
+            },
+            "7142": {
+              "n": 3,
+              "min": 0.0008298000320792198,
+              "max": 0.0009449999779462814,
+              "avg": 0.0008855999913066626,
+              "std": 5.7684287548428616e-05,
+              "total": 0.0026567999739199877
+            },
+            "8754": {
+              "n": 3,
+              "min": 0.0008171999361366034,
+              "max": 0.0008848998695611954,
+              "avg": 0.0008407665882259607,
+              "std": 3.8249966344123474e-05,
+              "total": 0.002522299764677882
+            },
+            "9104": {
+              "n": 3,
+              "min": 0.0008258000016212463,
+              "max": 0.0011628998909145594,
+              "avg": 0.0009661666893710693,
+              "std": 0.00017547641365246136,
+              "total": 0.002898500068113208
+            }
+          },
+          "raw": [
+            0.0009822000283747911,
+            0.0010291999205946922,
+            0.0008887001313269138,
+            0.0009443000890314579,
+            0.0007577999494969845,
+            0.0007148999720811844,
+            0.0007998000364750624,
+            0.0008819999638944864,
+            0.0008171999361366034,
+            0.0009098001755774021,
+            0.0010123001411557198,
+            0.0009574000723659992,
+            0.001010499894618988,
+            0.0009634001180529594,
+            0.0008145999163389206,
+            0.0009568999521434307,
+            0.0007587999571114779,
+            0.0009449999779462814,
+            0.0008201999589800835,
+            0.0008258000016212463,
+            0.0010547998826950788,
+            0.0009876999538391829,
+            0.0010132999159395695,
+            0.0009268999565392733,
+            0.0009312001056969166,
+            0.0007641001138836145,
+            0.0008132997900247574,
+            0.0008298000320792198,
+            0.0008848998695611954,
+            0.0011628998909145594
+          ]
+        }
+      },
+      "validation": {
+        "same_top_k_l2_vs_cosine": 10,
+        "max_abs_error_l2sq_vs_2cos": 2.1192308075068667e-07,
+        "excludes_query_itself": true,
+        "recall_vs_P2": {
+          "l2": 1.0,
+          "cosine": 1.0
+        }
+      }
+    }
+  },
+  "hnsw_ef_search": 40,
+  "db_calls": {
+    "per_query_and_metric": 1,
+    "per_run": 20
+  },
+  "answers": [
+    {
+      "query_rank": 0,
+      "sentence_id": 654,
+      "text": "jasons face grinned in a seriously weird way that screamed , weirdo !",
+      "l2": [
+        {
+          "sentence_id": 651,
+          "distance": 0.7453049489404526,
+          "text": "jasons face twisted up and a snort of laughter fought its way out of his nose ."
+        },
+        {
+          "sentence_id": 708,
+          "distance": 0.7547206531769338,
+          "text": "jason smiled but you could see he was hiding the anger in his face ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 651,
+          "distance": 0.277739627496025,
+          "text": "jasons face twisted up and a snort of laughter fought its way out of his nose ."
+        },
+        {
+          "sentence_id": 708,
+          "distance": 0.28480158538808786,
+          "text": "jason smiled but you could see he was hiding the anger in his face ."
+        }
+      ]
+    },
+    {
+      "query_rank": 1,
+      "sentence_id": 1114,
+      "text": "it must have been some type of faery because i could see long , pointed ears sticking up from the sides of its head .",
+      "l2": [
+        {
+          "sentence_id": 31,
+          "distance": 0.9815633674333559,
+          "text": "out of my left eye i saw the outline of a creature ."
+        },
+        {
+          "sentence_id": 1370,
+          "distance": 0.9818417787425551,
+          "text": "she stood right in front of its head and opened her mouth , bizarre sounds started coming out ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 31,
+          "distance": 0.48173333758910275,
+          "text": "out of my left eye i saw the outline of a creature ."
+        },
+        {
+          "sentence_id": 1370,
+          "distance": 0.4820065807100179,
+          "text": "she stood right in front of its head and opened her mouth , bizarre sounds started coming out ."
+        }
+      ]
+    },
+    {
+      "query_rank": 2,
+      "sentence_id": 2025,
+      "text": "it involves lots of smart remarks and bad decisions involving life or death .",
+      "l2": [
+        {
+          "sentence_id": 2026,
+          "distance": 0.9882611962496488,
+          "text": "it also involves a bad choice of a place where you roll around pretending like your life could be normal for a second ."
+        },
+        {
+          "sentence_id": 2734,
+          "distance": 1.0574435921994108,
+          "text": "and that means questions , big life and death questions ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 2026,
+          "distance": 0.48833011055975917,
+          "text": "it also involves a bad choice of a place where you roll around pretending like your life could be normal for a second ."
+        },
+        {
+          "sentence_id": 2734,
+          "distance": 0.5590933824125889,
+          "text": "and that means questions , big life and death questions ."
+        }
+      ]
+    },
+    {
+      "query_rank": 3,
+      "sentence_id": 3759,
+      "text": "he was squinting at the thing with extreme concentration , like a successful young stock broker in an armani suit instead of a missionary in cut-off khaki shorts that really needed a haircut .",
+      "l2": [
+        {
+          "sentence_id": 2979,
+          "distance": 0.9148902079890545,
+          "text": "he was trying to pretend it was just a piece of dust he had to scrub from one eye , but the ruse was n't working very well ."
+        },
+        {
+          "sentence_id": 2902,
+          "distance": 0.9294612192412469,
+          "text": "the few inches of reddish , peachy fuzz dusting his chin at least showed that he had made the effort to be pious ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 2979,
+          "distance": 0.4185121308870383,
+          "text": "he was trying to pretend it was just a piece of dust he had to scrub from one eye , but the ruse was n't working very well ."
+        },
+        {
+          "sentence_id": 2902,
+          "distance": 0.4319490451782363,
+          "text": "the few inches of reddish , peachy fuzz dusting his chin at least showed that he had made the effort to be pious ."
+        }
+      ]
+    },
+    {
+      "query_rank": 4,
+      "sentence_id": 4281,
+      "text": "she took one last glance at wara but did n't seem to be concerned as she sauntered into the back room .",
+      "l2": [
+        {
+          "sentence_id": 5538,
+          "distance": 0.708023344724563,
+          "text": "wara felt sick , watching him go out of the corner of her eye ."
+        },
+        {
+          "sentence_id": 6098,
+          "distance": 0.714966226727118,
+          "text": "wara began wondering if she should be worried ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 5538,
+          "distance": 0.25064861774444047,
+          "text": "wara felt sick , watching him go out of the corner of her eye ."
+        },
+        {
+          "sentence_id": 6098,
+          "distance": 0.25558837486539854,
+          "text": "wara began wondering if she should be worried ."
+        }
+      ]
+    },
+    {
+      "query_rank": 5,
+      "sentence_id": 5250,
+      "text": "wara bit her lip , then strummed a chord .",
+      "l2": [
+        {
+          "sentence_id": 6094,
+          "distance": 0.7433959358593777,
+          "text": "wara pressed her lips together , really beginning to wonder why they were scuttling down a side stairway of univalle as if this were some sort of jailbreak ."
+        },
+        {
+          "sentence_id": 5102,
+          "distance": 0.7648623813935473,
+          "text": "wara bit her lip and reached up with one hand to push a stray piece of hair out of one eye ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 6094,
+          "distance": 0.2763187885284373,
+          "text": "wara pressed her lips together , really beginning to wonder why they were scuttling down a side stairway of univalle as if this were some sort of jailbreak ."
+        },
+        {
+          "sentence_id": 5102,
+          "distance": 0.2925071541960731,
+          "text": "wara bit her lip and reached up with one hand to push a stray piece of hair out of one eye ."
+        }
+      ]
+    },
+    {
+      "query_rank": 6,
+      "sentence_id": 6228,
+      "text": "for that , i offer my life now in jihad , against the injustices of the world and against the unrighteousness in my own heart .",
+      "l2": [
+        {
+          "sentence_id": 6218,
+          "distance": 0.8345531516316108,
+          "text": "`` i do this as my jihad against the cause of injustice , against those who maim and kill god 's people in palestine and around the world . ''"
+        },
+        {
+          "sentence_id": 6220,
+          "distance": 0.9177319809763962,
+          "text": "but with this my weapon , my talent that allah has given me , i fight for his cause in the world and thus win his favor for paradise . ''"
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 6218,
+          "distance": 0.3482395423864906,
+          "text": "`` i do this as my jihad against the cause of injustice , against those who maim and kill god 's people in palestine and around the world . ''"
+        },
+        {
+          "sentence_id": 6220,
+          "distance": 0.4211159254450709,
+          "text": "but with this my weapon , my talent that allah has given me , i fight for his cause in the world and thus win his favor for paradise . ''"
+        }
+      ]
+    },
+    {
+      "query_rank": 7,
+      "sentence_id": 7142,
+      "text": "trae watched in horror as the buicks dark tinted windows began to lower .",
+      "l2": [
+        {
+          "sentence_id": 7119,
+          "distance": 0.9491819837694616,
+          "text": "trae watched her for a moment , then became distracted as an older buick with faded paint slowly drifted toward the stop sign at the beginning of their street ."
+        },
+        {
+          "sentence_id": 7121,
+          "distance": 0.9502298754593623,
+          "text": "trae focused more of his attention on the car ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 7119,
+          "distance": 0.4504732221082903,
+          "text": "trae watched her for a moment , then became distracted as an older buick with faded paint slowly drifted toward the stop sign at the beginning of their street ."
+        },
+        {
+          "sentence_id": 7121,
+          "distance": 0.4514683215935029,
+          "text": "trae focused more of his attention on the car ."
+        }
+      ]
+    },
+    {
+      "query_rank": 8,
+      "sentence_id": 8754,
+      "text": "but three misses , we go home and im two hundred richer .",
+      "l2": [
+        {
+          "sentence_id": 9803,
+          "distance": 1.0365110348796323,
+          "text": "im already at two hundred grand a hit , and that will move to two-fifty on the next ones ."
+        },
+        {
+          "sentence_id": 8751,
+          "distance": 1.0496687548259156,
+          "text": "two hundred pesos says i nail it three out of five ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 9803,
+          "distance": 0.5371774688747529,
+          "text": "im already at two hundred grand a hit , and that will move to two-fifty on the next ones ."
+        },
+        {
+          "sentence_id": 8751,
+          "distance": 0.5509022413608708,
+          "text": "two hundred pesos says i nail it three out of five ."
+        }
+      ]
+    },
+    {
+      "query_rank": 9,
+      "sentence_id": 9104,
+      "text": "theyd always wear gloves , and mix it fifty parts water to one part acid .",
+      "l2": [
+        {
+          "sentence_id": 7892,
+          "distance": 0.9620459141867492,
+          "text": "he then poured off some of the boiling water into third pot and began to scrub his hands and arms with the soap , as well as the rubber gloves he had in his pocket ."
+        },
+        {
+          "sentence_id": 7922,
+          "distance": 0.9684975818215875,
+          "text": "once again , david did his best to rinse and clean the wound with the salted water solution , and then sterilize it with the distilled alcohol ."
+        }
+      ],
+      "cosine": [
+        {
+          "sentence_id": 7892,
+          "distance": 0.46276615449089253,
+          "text": "he then poured off some of the boiling water into third pot and began to scrub his hands and arms with the soap , as well as the rubber gloves he had in his pocket ."
+        },
+        {
+          "sentence_id": 7922,
+          "distance": 0.4689937671719122,
+          "text": "once again , david did his best to rinse and clean the wound with the salted water solution , and then sterilize it with the distilled alcohol ."
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,10 @@
 # after an explicit `CREATE EXTENSION vector`. P0/P1/P2 therefore run on plain
 # PostgreSQL (database `cbde`), and the optional part enables the extension in a
 # separate database (`cbde_pgvector`) so the two experiments never interfere.
+#
+# `cbde_pgvector` is created by docker/init/*.sql, which PostgreSQL only runs
+# when the data volume is empty. On a volume created before that script existed,
+# create it once by hand (see README).
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -17,6 +21,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cbde -d cbde"]
       interval: 5s

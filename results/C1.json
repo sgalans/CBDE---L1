@@ -1,0 +1,93 @@
+{
+  "script": "C1",
+  "timestamp": "2026-09-28 19:54:35",
+  "collections": {
+    "l2": "sentences_l2",
+    "cosine": "sentences_cosine"
+  },
+  "dim": 384,
+  "n_sentences": 10000,
+  "read": {
+    "time": 0.21447669994086027,
+    "db_calls": {
+      "get": 1
+    }
+  },
+  "generate": {
+    "batch_size": 1000,
+    "batch_time": {
+      "n": 10,
+      "min": 1.2557188000064343,
+      "max": 1.9593221999239177,
+      "avg": 1.6366734699811787,
+      "std": 0.21944695139665535,
+      "total": 16.366734699811786
+    }
+  },
+  "store": {
+    "l2": {
+      "collection": "sentences_l2",
+      "batch_size": 1000,
+      "repeats": 3,
+      "batch_time": {
+        "n": 30,
+        "min": 0.25848460011184216,
+        "max": 0.3346318998374045,
+        "avg": 0.2970031599747017,
+        "std": 0.017501473201442328,
+        "total": 8.910094799241051
+      },
+      "total_time": {
+        "n": 3,
+        "min": 2.8813307997770607,
+        "max": 3.0415863995440304,
+        "avg": 2.970031599747017,
+        "std": 0.08149204443143951,
+        "total": 8.910094799241051
+      },
+      "db_calls": {
+        "update": 10
+      }
+    },
+    "cosine": {
+      "collection": "sentences_cosine",
+      "batch_size": 1000,
+      "repeats": 3,
+      "batch_time": {
+        "n": 30,
+        "min": 0.2493661001790315,
+        "max": 0.3745605000294745,
+        "avg": 0.28479724331603695,
+        "std": 0.023851390844409483,
+        "total": 8.543917299481109
+      },
+      "total_time": {
+        "n": 3,
+        "min": 2.8097103000618517,
+        "max": 2.913330599665642,
+        "avg": 2.8479724331603697,
+        "std": 0.056876514417462005,
+        "total": 8.543917299481109
+      },
+      "db_calls": {
+        "update": 10
+      }
+    }
+  },
+  "validation": {
+    "rows": {
+      "l2": 10000,
+      "cosine": 10000
+    },
+    "roundtrip_max_abs_error": {
+      "l2": 0.0,
+      "cosine": 1.4901161193847656e-08
+    },
+    "vectors_changed": {
+      "l2": 0,
+      "cosine": 2754
+    },
+    "onnx_vs_model_max_abs_diff": 1.993030309677124e-07,
+    "onnx_sample_size": 500
+  }
+}

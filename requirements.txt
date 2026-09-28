@@ -15,3 +15,10 @@ chromadb>=0.5.0
 
 # pgvector adapter (optional part)
 pgvector>=0.3.0
+
+# Report (docs/informe.qmd): Quarto runs its Python cells through Jupyter
+jupyter-core>=5.0
+nbformat>=5.9
+nbclient>=0.10
+ipykernel>=6.29
+pyyaml>=6.0
