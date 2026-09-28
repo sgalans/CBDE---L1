@@ -506,6 +506,21 @@ Recollida d'una revisió externa (2026-09-28), per no perdre-la:
   en "mesurat / no mesurat" (ja s'indica "mesurat" a cada una, i l'espai és
   just).
 
+### 2026-09-28 — Mesures oficials
+
+- **Preparació:** abans de llançar-les, la IA va comprovar l'estat de la
+  màquina i va detectar que el portàtil se suspenia als 45 min (les mesures
+  en duren ~70) i que Wallpaper Engine era el procés amb més CPU del
+  sistema; l'usuari ho va corregir abans de començar.
+- **Execució:** 65 min, totes les validacions correctes; la diferència
+  ONNX vs. model es va poder mesurar (2·10⁻⁷) perquè `C0 → C1` van anar
+  seguits.
+- **Revisió de les interpretacions:** es van recalcular tots els valors que
+  el text interpreta. Només una frase va deixar de ser certa ("a mida 1,
+  `vector` surt més lent que `REAL[]`": ara és al revés); es va reescriure
+  sense afirmar el sentit de la diferència, que és soroll segons la prova
+  intercalada.
+
 ### 2026-09-27 — Eina per al document
 
 - **IA externa:** Quarto, Typst, Overleaf o Jupyter.

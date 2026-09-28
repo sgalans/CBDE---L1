@@ -411,13 +411,13 @@ davant de les `{python} str(system_lines("postgres/P2.py"))` de `P2`. Les crides
 
 **Estabilitat de les insercions.** Amb lots, els temps són estables (CV per
 lot baix, desviació entre càrregues petita). Com a PostgreSQL, el text depèn
-del nombre de crides i els vectors, de la conversió a text. A mida 1,
-`vector(384)` surt més lent que `REAL[]` (`{python} GV2.row_by_row("G1")` s
-davant de `{python} GV2.row_by_row("P1")` s), però no és un efecte del tipus:
-una prova intercalant insercions d'una fila a totes dues bases de dades dona el
-mateix cost per fila, i el text de `G0` i `P0`, amb codi idèntic, ja difereix
-un `{python} GV2.same_code_spread()` a aquesta mida. El fila a fila, amb 10.000
-crides, és la mesura més sensible a la càrrega de la màquina.
+del nombre de crides i els vectors, de la conversió a text. A mida 1
+(`{python} GV2.row_by_row("G1")` s amb `vector(384)` i `{python} GV2.row_by_row("P1")` s amb `REAL[]`)
+la diferència no s'ha d'atribuir al tipus: una prova intercalant insercions
+d'una fila a totes dues bases de dades dona el mateix cost per fila, i el text
+de `G0` i `P0`, amb codi idèntic, ja difereix un `{python} GV2.same_code_spread()`
+a aquesta mida. El fila a fila, amb 10.000 crides, és la mesura més sensible a
+la càrrega de la màquina.
 
 ```{python}
 #| output: asis

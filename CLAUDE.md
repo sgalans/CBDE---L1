@@ -229,6 +229,16 @@ Verificat amb `chromadb` 1.5.9:
   HNSW ocupa més que la taula. Per llegir `hnsw.ef_search` cal haver carregat
   la llibreria a la sessió (`SELECT NULL::vector`).
 
+### Mesures oficials (2026-09-28, 18:53–19:58)
+
+Executades al portàtil d'en Sergi, endollat, sense suspensió, en mode de
+màxim rendiment i amb les aplicacions pesants tancades, en l'ordre
+`P0 → … → G2` sense interrupcions. Són els `results/*.json` definitius. Totes
+les validacions van passar. Si es torna a executar algun script, cal tornar a
+revisar les frases de l'informe que interpreten un resultat (no només les
+xifres): la de "mida 1 a pgvector" ja va canviar de signe entre execucions i
+es va reescriure perquè no depengués del sentit de la diferència.
+
 ## Màquines de treball
 
 Cada membre de l'equip desenvolupa des del seu portàtil. El repo no conté cap
