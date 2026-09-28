@@ -52,6 +52,10 @@ def ms(seconds: float, decimals: int = 1) -> str:
 
 
 def pct(x: float, decimals: int = 0) -> str:
+    # A positive value that would round to 0 is shown as "< 1 %": "0 %" would
+    # read as an impossible (or missing) measurement.
+    if decimals == 0 and 0 < x < 0.005:
+        return "< 1 %"
     return num(100 * x, decimals) + " %"
 
 
@@ -998,3 +1002,25 @@ def p2_overhead_share() -> str:
     g = load("G2")["configs"]["exact"]["timing"]["l2"]["query_time"]["avg"]
     p = load("P2")["timing"]["l2"]["query_time"]["avg"]
     return pct(1 - g / p)
+
+
+
+def update_vs_insert() -> str:
+    """C1's update() vs. P1's INSERT of REAL[], per batch, with its direction."""
+    c = load("C1")["store"]["l2"]["batch_time"]["avg"]
+    p = _by_size(load("P1")["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]["avg"]
+    return f"un {pct(abs(c / p - 1))} {'més lent' if c > p else 'més ràpid'}"
+
+
+def batch_cv(name: str) -> str:
+    """Per-batch CV at the chosen size (P0/P1/G0/G1 grids)."""
+    return pct(cv(_by_size(load(name)["grid"])[DEFAULT_BATCH_SIZE]["batch_time"]))
+
+
+def query_max_ms(name: str = "P2", metric: str = "l2") -> str:
+    return ms(load(name)["timing"][metric]["query_time"]["max"], 0)
+
+
+def chroma_version() -> str:
+    import chromadb
+    return chromadb.__version__

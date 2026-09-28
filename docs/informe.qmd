@@ -147,7 +147,9 @@ cost de Python que no depèn de la base de dades.
 són estables (CV `{python} PG.query_cv("l2")` per a L2 i
 `{python} PG.query_cv("cosine")` per al cosinus): cada consulta fa exactament
 la mateixa feina, recórrer les 10.000 files i operar 384 components per fila,
-sigui quina sigui la frase.
+sigui quina sigui la frase. Per això, les variacions (màxim de `{python} query_max_ms()` ms)
+s'atribueixen a interferències puntuals del sistema i no a diferències entre
+consultes.
 
 ```{python}
 #| output: asis
@@ -235,8 +237,10 @@ normalitzar-los, vegeu [CQ1]). La diferència amb `P1` és que
 Chroma rep directament l'array de numpy: no hi ha cap conversió
 float → text → float.
 
-**`C2`: consulta amb índex i sense cerca per identificador.** Chroma no permet
-buscar els veïns d'un registre pel seu id: `query()` necessita el vector. Cada
+**`C2`: consulta amb índex i sense cerca per identificador.** A la versió
+utilitzada (`chromadb` `{python} chroma_version()`), `query()` necessita un vector o un text
+de consulta: el seu paràmetre `ids` només restringeix entre quins registres es
+busca, no permet buscar els veïns d'un registre pel seu id (comprovat). Cada
 consulta són, doncs, dues crides: `get()` per obtenir el vector desat de la
 frase i `query()` amb `n_results = 2` i el filtre de metadades
 `where={"sentence_id": {"$ne": id}}`, que exclou la pròpia frase. La cerca
@@ -285,8 +289,8 @@ de cosinus (una sola càrrega) difereix un `{python} CH.metric_insert_diff()`
 de la d'L2, una diferència petita i propera a la variació entre lots.
 (3) **Desar els vectors no és més barat que a PostgreSQL**: tot i rebre
 l'array de numpy directament, sense passar per text, un `update()` de 1000
-vectors triga `{python} CH.update_ms()` ms, pràcticament el mateix que
-l'`INSERT` de `REAL[]` de `P1` (ràtio `{python} CH.store_vs_pg()`). Cal tenir
+vectors triga `{python} CH.update_ms()` ms, `{python} update_vs_insert()` que
+l'`INSERT` de `REAL[]` de `P1`. Cal tenir
 en compte que Chroma, a més d'escriure el vector, l'ha d'inserir a l'índex
 HNSW; dins l'`add()`, la part que no és embedding costa
 `{python} CH.add_store_ms()` ms per lot.
@@ -300,7 +304,8 @@ PostgreSQL**. Però el `{python} CH.nofilter_gain()` d'aquest temps és el filtr
 les millores): sense filtre, obtenir el vector i cercar a l'índex HNSW triga
 `{python} CH.nofilter_ms()` ms, unes **`{python} CH.index_speedup()` vegades
 menys que la força bruta de `P2`**. Aquesta comparació aïlla millor el guany
-atribuïble a l'índex vectorial. La diferència no ve de la xarxa: fins i tot un `INSERT` d'una fila amb el seu `COMMIT` (mida
+atribuïble a l'índex vectorial. La xarxa no sembla explicar la major part de la diferència: fins i tot un
+`INSERT` d'una fila amb el seu `COMMIT` (mida
 de lot 1 a `P0`), que inclou l'anada i tornada, és només un
 `{python} CH.pg_call_share()` d'una consulta de `P2`.
 
@@ -409,8 +414,9 @@ davant de les `{python} str(system_lines("postgres/P2.py"))` de `P2`. Les crides
 
 ## Resultats i preguntes
 
-**Estabilitat de les insercions.** Amb lots, els temps són estables (CV per
-lot baix, desviació entre càrregues petita). Com a PostgreSQL, el text depèn
+**Estabilitat de les insercions.** Amb lots, desar vectors és estable (CV
+per lot `{python} batch_cv("G1")`); el text de `G0` té un CV més alt
+(`{python} batch_cv("G0")`) perquè els lots duren ~10 ms i un sol lot lent hi pesa molt. Com a PostgreSQL, el text depèn
 del nombre de crides i els vectors, de la conversió a text. A mida 1
 (`{python} GV2.row_by_row("G1")` s amb `vector(384)` i `{python} GV2.row_by_row("P1")` s amb `REAL[]`)
 la diferència no s'ha d'atribuir al tipus: una prova intercalant insercions
@@ -492,8 +498,8 @@ print(comparison_table())
 
 **Una gradació de l'*impedance mismatch*.** Les dades mostren tres graus
 d'encaix entre la naturalesa de les dades i la representació interna de cada
-sistema. A **PostgreSQL pur** el desajust és complet: el vector és un array
-genèric que la base de dades no entén, i tot el que el fa útil (la distància,
+sistema. A **PostgreSQL pur** el desajust és el més gran dels tres: el
+vector és un array genèric que la base de dades no tracta com a vector, i tot el que el fa útil (la distància,
 el rànquing, l'exclusió) s'ha d'escriure a mà en SQL interpretat, amb un cost
 en línies de codi i en temps: la mateixa força bruta que pgvector fa en
 `{python} GV.query_ms("exact")` ms hi triga `{python} PG.query_avg_ms("l2")` ms.
@@ -523,10 +529,57 @@ ocupa el punt mig: en aquest experiment combina tipus, operadors i índexs
 vectorials natius amb el model relacional, i redueix gran part del desajust
 sense separar els vectors de la resta de dades (no s'hi han avaluat
 concurrència, volums més grans ni cost d'operació). La lliçó general
-coincideix amb la de l'enunciat: com més a prop està la representació interna
-de la naturalesa de les dades, millor rendiment, i com més lluny, més codi i
-temps cal per cobrir la distància.
+coincideix amb la de l'enunciat: com més s'ajusta la representació interna a
+la naturalesa de les dades, menys codi i adaptacions calen, i en aquest
+experiment també menys temps de consulta.
 
 # I am an AI agent. Tell me what I have to build.
 
-TODO (màxim 1 pàgina): síntesi a partir de `docs/ai_log.md`.
+**Rols.** Claude Code (Claude Opus 5.5), amb accés al repositori, va
+implementar i executar els scripts i va redactar l'informe, que revisàvem
+nosaltres; altres xats
+(Claude, Gemini, ChatGPT) van fer de revisors independents del document. Les
+decisions de disseny les vam prendre nosaltres: la IA proposava alternatives
+amb els seus costos i nosaltres triàvem (p. ex. el disseny de `C0`/`C1`, les
+repeticions de Chroma o fer pgvector).
+
+**Raonament de les instruccions.** En lloc de prompts llargs, vam mantenir un
+context persistent al repositori que la IA llegeix a cada sessió: un
+`CLAUDE.md` amb les decisions ja preses (marcades per no tornar-les a
+discutir), les indicacions del professor (insercions per lots, distàncies
+dins la BD) i els criteris de mesura, i l'enunciat literal com a font de
+veritat. Així, cada prompt podia ser una tasca curta ("fes `P0`") i les
+respostes eren coherents entre sessions i entre els dos membres de l'equip.
+Tres regles hi van pesar especialment: cap xifra del document escrita a mà
+(tot surt dels `results/*.json`), totes les mesures oficials en una sola
+màquina, i un registre de cada decisió en què intervenia la IA
+(`docs/ai_log.md`), que és la font d'aquesta secció.
+
+**Com es van refinar.** Les instruccions van créixer a partir dels errors de
+la IA. En desar l'enunciat sencer com a font de veritat vam veure que el
+`C1` que havia dissenyat a partir d'un resum no complia *"generate and
+store"*, i es va redissenyar; quan va ajornar la redacció de [PQ1], vam afegir la regla
+d'escriure les observacions en acabar cada script; quan va proposar retallar
+el grid de `C0` per estalviar temps, la vam corregir amb la regla del "grid
+únic" que ella mateixa havia documentat. Altres decisions van canviar en
+veure les dades: l'equivalència L2/cosinus es va documentar i verificar en
+lloc de canviar de mètrica (Chroma no admet L1), i la mida de lot es va
+justificar pel comportament del sistema i no per conveniència estadística.
+
+**Com es va validar.** No vam acceptar cap resultat només perquè la IA el
+donés per bo. Cada script porta comprovacions independents: vectors
+recuperats bit a bit, `P2` contrastat amb numpy (només com a oracle),
+`EXPLAIN` dels plans, *recall* contra `P2`, la identitat L2² = 2 − 2·cos a les
+dades i una taula del top-2 que fa fallar el document si els sistemes no
+coincideixen. Les anomalies es van investigar en lloc d'explicar-les: una
+latència de ~45 ms per missatge resultava ser Docker per IPv6 i no
+PostgreSQL; el cost de desar `REAL[]` era la conversió float → text; una
+diferència al fila a fila de pgvector es va comprovar que era soroll amb una
+prova intercalada. Finalment, les crítiques dels revisors externs també es
+van verificar contra les dades abans d'aplicar-les: n'hi va haver
+d'encertades (la comparació justa de `C0` era amb `P0` més la generació de
+`P1`, i la conclusió es va invertir), i d'errònies (un percentatge calculat
+amb valors arrodonits, una lectura del PDF que no coincidia amb el PDF real,
+o suggeriments per a aquesta mateixa secció que descrivien un ús de la IA
+que no havíem fet). La lliçó és que la IA ens va fer molt més ràpids, però
+la fiabilitat va venir de comprovar-ho tot amb execucions i dades.

@@ -14,7 +14,7 @@ Eines:
   del professor) que Claude Code llegeix a cada sessió, per no haver de
   repetir-lo a cada prompt i evitar propostes que contradiguin l'enunciat.
 
-## Guia per redactar l'apartat "I am an AI agent…" (pendent, es farà al final)
+## Guia per redactar l'apartat "I am an AI agent…" (redactat el 2026-09-28)
 
 Recollida d'una revisió externa (2026-09-28), per no perdre-la:
 
@@ -520,6 +520,32 @@ Recollida d'una revisió externa (2026-09-28), per no perdre-la:
   `vector` surt més lent que `REAL[]`": ara és al revés); es va reescriure
   sense afirmar el sentit de la diferència, que és soroll segons la prova
   intercalada.
+
+### 2026-09-28 — Redacció de l'apartat d'IA
+
+- **Demanat:** redactar la secció 5 a partir de l'enunciat, el `CLAUDE.md` i
+  aquest registre.
+- **IA:** estructura en els tres eixos de l'enunciat (raonament, refinament,
+  validació) més els rols; només fets que consten en aquest registre (cap
+  rol ni `EXPLAIN ANALYZE`). Ocupa ~¾ de pàgina: el document fa 10 pàgines.
+- **Autorevisió:** en contrastar-la amb el registre, un fet estava en ordre
+  invertit (el problema de `C1` es va detectar *en* desar l'enunciat, no
+  abans) i es va corregir.
+
+### 2026-09-28 — Tercera ronda de revisions (ChatGPT, Gemini, Claude)
+
+- **Falses, verificades abans de rebutjar-les:** (1) "Chroma sí que permet
+  `query(ids=...)`": el paràmetre existeix, però una prova mostra que sense
+  vector dona error i que amb vector només restringeix el conjunt de
+  candidats; el text es fa més precís i indica la versió (`chromadb` 1.5.9).
+  (2) Canviar el títol de la secció d'IA: és el nom literal del lliurable a
+  l'enunciat, es manté.
+- **Correctes (Claude):** el text de `G0` tenia CV 15 % i el document deia
+  "CV per lot baix"; `pct()` mostrava "0 %" per a valors de 0,3–0,5 % (ara
+  "< 1 %"); "ràtio 0,9" no deia la direcció (Chroma és un 7 % *més lent*).
+- **Correctes (ChatGPT/Gemini):** "desajust complet", "la diferència no ve de
+  la xarxa" i la lliçó general eren més absoluts del que les dades mostren;
+  reformulats.
 
 ### 2026-09-27 — Eina per al document
 
